@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><UseWindowsForms>true</UseWindowsForms><ApplicationManifest>../../src/AppTabs.App/app.manifest</ApplicationManifest></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/AppTabs.Core/AppTabs.Core.csproj" /><ProjectReference Include="../../src/AppTabs.App/AppTabs.App.csproj" /></ItemGroup>
+</Project>
