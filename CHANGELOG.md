@@ -12,13 +12,7 @@
 
 ## [未发布]
 
-### 修复
-
-- 修复首次打包 / `dist` 不存在时 collect 未创建目标目录导致发布失败的问题；失败仍保留旧产物。
-
-### 变更
-
-- AI 协作文档按 vibe-coding-starter 模板重构：补齐 `CLAUDE.md`、`docs/`、`check-docs.sh`、文档体量与信息去向规则，并重写 AGENTS / ARCHITECTURE / HANDOFF / ROADMAP。
+<!-- 新的使用者可感知改动写在这里；发版时归档到版本号下。 -->
 
 ---
 
@@ -37,12 +31,14 @@
 - 统一圆角弹窗和 1px 实色边框；窗口选择器保留缩放，软件列移到窗口标题前。
 - 更换为叠层应用窗口与活动标签图标，统一主窗、托盘和欢迎页，提供七尺寸透明 ICO。
 - `package.bat` 改为“快照 → Debug / Release 全新构建 → 收集”，发布 `dist\dev` 的 debug zip、`dist\release\unpack\`、release zip 与 `SHA256SUMS.txt`；失败恢复上一版，占用时只报告不结束进程；`build.bat` 复用同一流程。
+- AI 协作文档按 vibe-coding-starter 模板重构：补齐 `CLAUDE.md`、`docs/`、`check-docs.sh`、Claude 技能、文档体量与信息去向规则，并重写 AGENTS / ARCHITECTURE / HANDOFF / ROADMAP。
 
 ### 修复
 
 - 修复空欢迎页在窗口缩放 / 最大化 / 还原后没有重新居中的问题：内容区随窗口尺寸变化重绘。
 - 修复开发启动重复构建时 EXE 被运行中的宿主 / 看门狗占用：增加运行检查与独立 Debug 输出，失败保留错误窗口；启动异常记录诊断并返回失败码。
 - 新库独立原子持久化，保存失败保留旧内存 / 文件，管理页保留编辑供重试；修复快照过滤后活动索引与正在关闭会话的保存边界，拒绝非法别名，设置失败补偿恢复旧全局键并明确报告恢复失败，注册失效时同组合保存可重试。
+- 修复首次打包 / `dist` 不存在时 collect 未创建目标目录导致发布失败的问题；失败仍保留旧产物。
 
 ---
 
