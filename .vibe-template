@@ -1,5 +1,8 @@
 # 本项目手工对齐 vibe-coding-starter 文档体系；类型为自定义的 C# WinForms 桌面应用。
-type=desktop-csharp-winforms
+# base_type 用于升级时对应模板类型（脚手架仍是项目自有实现）。
+type=custom
+base_type=dotnet-native-desktop
 project_name=app-tabs
-template_version=2026-10-31.4
+template_version=2026-11-10.1
 created=2026-11-10
+upgraded=2026-11-11
