@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path fill="#4f46e5" d="M4 5h23v7h33v46H4z"/><path fill="#fff" d="M13 24h17v24H13zm22 0h16v24H35z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>AppTabs — stacked application windows with an active tab</title>
+  <path fill="#244DA8" d="M20 6 L56 6 C58.21 6 60 7.79 60 10 L60 40 C60 42.21 58.21 44 56 44 L20 44 C17.79 44 16 42.21 16 40 L16 10 C16 7.79 17.79 6 20 6 Z"/>
+  <path fill="#80B8FF" d="M22 10 L36 10 L36 12 L22 12 Z"/>
+  <path fill="#DBEAFE" d="M19 16 L57 16 L57 39 C57 40.1 56.1 41 55 41 L21 41 C19.9 41 19 40.1 19 39 Z"/>
+  <path fill="#3B82F6" d="M14 13 L50 13 C52.21 13 54 14.79 54 17 L54 46 C54 48.21 52.21 50 50 50 L14 50 C11.79 50 10 48.21 10 46 L10 17 C10 14.79 11.79 13 14 13 Z"/>
+  <path fill="#DBEAFE" d="M16 17 L31 17 L31 19 L16 19 Z"/>
+  <path fill="#EFF6FF" d="M13 23 L51 23 L51 45 C51 46.1 50.1 47 49 47 L15 47 C13.9 47 13 46.1 13 45 Z"/>
+  <path fill="#165DCA" d="M8 21 L46 21 C48.21 21 50 22.79 50 25 L50 54 C50 56.21 48.21 58 46 58 L8 58 C5.79 58 4 56.21 4 54 L4 25 C4 22.79 5.79 21 8 21 Z"/>
+  <path fill="#F8FBFF" d="M12 24 L26 24 C27.66 24 29 25.34 29 27 L29 34 L9 34 L9 27 C9 25.34 10.34 24 12 24 Z"/>
+  <path fill="#165DCA" d="M13 28 L25 28 L25 30 L13 30 Z"/>
+  <path fill="#80B8FF" d="M33 27 L43 27 L43 30 L33 30 Z"/>
+  <path fill="#F8FBFF" d="M7 34 L47 34 L47 53 C47 54.1 46.1 55 45 55 L9 55 C7.9 55 7 54.1 7 53 Z"/>
+  <path fill="#3B82F6" d="M12 40 L19 40 C20.1 40 21 40.9 21 42 L21 49 C21 50.1 20.1 51 19 51 L12 51 C10.9 51 10 50.1 10 49 L10 42 C10 40.9 10.9 40 12 40 Z"/>
+  <path fill="#165DCA" d="M26 40 L43 40 L43 43 L26 43 Z"/>
+  <path fill="#80B8FF" d="M26 47 L38 47 L38 50 L26 50 Z"/>
+</svg>

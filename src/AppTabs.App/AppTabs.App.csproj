@@ -7,4 +7,7 @@
     <ApplicationIcon>../../assets/app-tabs.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../AppTabs.Core/AppTabs.Core.csproj" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/app-tabs.ico" LogicalName="AppTabs.App.app-tabs.ico" />
+  </ItemGroup>
 </Project>

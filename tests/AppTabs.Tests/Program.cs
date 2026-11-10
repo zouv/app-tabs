@@ -13,7 +13,7 @@ using AppTabs.Core;
 
 namespace AppTabs.Tests
 {
-    internal static class Program
+    internal static partial class Program
     {
         private static int assertions;
         private static string testDirectory = "";
@@ -28,7 +28,7 @@ namespace AppTabs.Tests
             Directory.CreateDirectory(testDirectory);
             try
             {
-                ControllerChecks(); PersistenceChecks(); PolicyChecks(); NativeChecks(); DpiChecks(); WatchdogChecks();
+                ControllerChecks(); PersistenceChecks(); PolicyChecks(); ChromeChecks(); TabGestureChecks(); DialogUiChecks(); LibraryChecks(); SettingsChecks(); LibraryHostChecks(); NativeChecks(); DpiChecks(); WatchdogChecks();
                 Console.WriteLine($"PASS: {assertions} assertions; fake failures, recovery, isolated native cross-process windows, mixed modes, UI rendering and watchdog.");
                 return 0;
             }

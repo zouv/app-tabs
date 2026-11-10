@@ -53,7 +53,13 @@ namespace AppTabs.App
                         Application.Run(form);
                     }
                 }
-                catch (Exception error) { MessageBox.Show(error.Message, "AppTabs 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                catch (Exception error)
+                {
+                    Environment.ExitCode = 1;
+                    string logPath = Path.Combine(directory, "app.log");
+                    Log(logPath, "startup.failed " + error);
+                    MessageBox.Show(error.Message + "\n诊断日志：" + logPath, "AppTabs 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
                 finally { mutex.ReleaseMutex(); }
             }
         }

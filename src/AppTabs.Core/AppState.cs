@@ -17,6 +17,29 @@ namespace AppTabs.Core
         [DataMember] public string Title { get; set; } = "";
         [DataMember] public string? CustomTitle { get; set; }
         [DataMember] public HostingMode Mode { get; set; }
+
+        public SavedWindow Copy() => new SavedWindow
+        {
+            ImagePath = ImagePath, ClassName = ClassName, Title = Title, CustomTitle = CustomTitle, Mode = Mode
+        };
+
+        public void Validate()
+        {
+            if (string.IsNullOrWhiteSpace(ImagePath) || ImagePath.Length > 32767 || !Path.IsPathRooted(ImagePath) ||
+                string.IsNullOrWhiteSpace(ClassName) || ClassName.Length > 256 || Title == null || Title.Length > 1024 ||
+                !Enum.IsDefined(typeof(HostingMode), Mode) || (CustomTitle != null && CustomTitle.Length > 120))
+                throw new InvalidDataException("保存的窗口组含无效条目。");
+            if (CustomTitle != null)
+            {
+                try
+                {
+                    if (TabManagementPolicy.NormalizeTitle(CustomTitle) != CustomTitle)
+                        throw new InvalidDataException("保存的自定义标签名称不能含首尾空格。");
+                }
+                catch (ArgumentException error)
+                { throw new InvalidDataException("保存的自定义标签名称无效。", error); }
+            }
+        }
     }
 
     [DataContract]
@@ -33,6 +56,13 @@ namespace AppTabs.Core
         [DataMember] public bool HideToTray { get; set; }
         [DataMember] public List<SavedWindow> Group { get; set; } = new List<SavedWindow>();
         [DataMember] public int ActiveIndex { get; set; }
+
+        public AppState Copy() => new AppState
+        {
+            Version = Version, X = X, Y = Y, Width = Width, Height = Height, Maximized = Maximized,
+            Preference = Preference, HotkeyChoice = HotkeyChoice, HideToTray = HideToTray,
+            Group = Group.Select(window => window.Copy()).ToList(), ActiveIndex = ActiveIndex
+        };
     }
 
     public sealed class StateStore
