@@ -193,6 +193,7 @@ function Write-Package {
     $relHash = (Get-FileHash -LiteralPath $relZip -Algorithm SHA256).Hash.ToLowerInvariant()
     Write-Utf8 (Join-Path $stagingRelease 'SHA256SUMS.txt') "$relHash  $relZipName`n$debugHash  $debugName.zip`n"
 
+    New-Item -ItemType Directory -Force -Path $dist | Out-Null
     try { Publish-PackageSet $root $staging $dist }
     catch {
         $message = $_.Exception.Message

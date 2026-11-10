@@ -12,6 +12,10 @@
 
 ## [未发布]
 
+### 修复
+
+- 修复首次打包 / `dist` 不存在时 collect 未创建目标目录导致发布失败的问题；失败仍保留旧产物。
+
 ### 变更
 
 - AI 协作文档按 vibe-coding-starter 模板重构：补齐 `CLAUDE.md`、`docs/`、`check-docs.sh`、文档体量与信息去向规则，并重写 AGENTS / ARCHITECTURE / HANDOFF / ROADMAP。
