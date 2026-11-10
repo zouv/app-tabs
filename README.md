@@ -54,4 +54,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
 
 无第三方 NuGet；默认构建启用警告即错误并运行测试。测试只使用 fake 接口与自建的 WinForms 跨进程窗口，绝不接管用户已有软件，也不注册实际全局钩子 / 热键。
 
+## 文档
+
+- [AGENTS.md](AGENTS.md)：AI 工作规则、技术 / 安全约束与验证入口。
+- [ARCHITECTURE.md](ARCHITECTURE.md)：代码链路图谱与任务 → 入口。
+- [ROADMAP.md](ROADMAP.md)：总体计划与完成度。
+- [CHANGELOG.md](CHANGELOG.md)：按版本记录使用者可感知的变化。
+- [HANDOFF.md](HANDOFF.md)：进行中任务与真实未验证事项。
+- [docs/00-目录.md](docs/00-目录.md)：面向人的使用 / 维护文档索引。
+
+文档体检：`sh check-docs.sh`。Claude Code 通过 `CLAUDE.md` 加载 `AGENTS.md`，其余协作文档由 `AGENTS.md` §0.5 索引。
+
 代码的 Win32 快照、接管、分离与恢复基础改编自同作者的 [ExplorerTabs](https://github.com/zouv/explorer-tabs)，本项目独立维护；保留专用 Explorer Ribbon 裁切，其余接管条件、恢复身份与模式管理已泛化。

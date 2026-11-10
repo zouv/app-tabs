@@ -1,0 +1,6 @@
+# 换行约定：脚本永远 LF，Windows 批处理永远 CRLF，与各人的 core.autocrlf 无关。
+* text=auto eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

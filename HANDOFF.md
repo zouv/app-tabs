@@ -1,10 +1,72 @@
-# 会话接力
+# 接力进度 / Handoff · AppTabs
 
-状态日期：2026-11-10；版本 0.2.0；无进行中功能；`dist` 需在运行实例正常退出后重新打包。
-验证：606 项断言通过，Release / Debug 构建零警告 / 零错误；欢迎页缩放重绘修复已进入测试构建与 `.runtime\dev`。当前 AppTabs 正从 `dist\release\unpack` 运行，`package.bat` 按规则拒绝覆盖且未结束进程；`dist` 便携包需正常退出后重新打包。覆盖 fake 故障与恢复、自建跨进程嵌入 / 分组混用、DPI 自动回退、默认退出还原、单行页签手势、四边 / 四角命中、两页设置与圆角弹窗、独立标签组 / 收藏库、候选提交失败、fake 启动、空欢迎页缩放重绘。96 / 144 / 192 DPI 弹窗截图为合成布局，不替代真实跨屏验证。未接管用户软件、未注册真实全局热键 / 键盘钩子、未启动真实收藏。
-已知测试未稳定项：既有 `DpiChecks` 的 ready 文件创建后读取竞态仍未修；本轮完整回归另有一次 `NativeChecks` 辅助进程 5 秒就绪超时，重跑通过，未修改就绪协议，不能视为已解决。
-脚本对齐：`dev.bat` 已加工具链检查与首次还原，`-BuildOnly` 隔离构建通过；`package.bat` 已改为 snapshot → Debug / Release 全新构建 → collect，生成 `dist\dev` debug zip 与 `dist\release\unpack` / zip / SHA256；正式打包成功，另用自建文件锁验证失败时恢复旧 `dist\dev` / `dist\release` 且未结束进程；`build.bat` 复用同一流程。606 项断言在脚本调整后重跑通过。
-入口：`dist/release/unpack/AppTabs.exe`；release zip 与 SHA256 在 `dist\release\`，debug zip 在 `dist\dev\`；构建 `build.bat`，结构导航见 ARCHITECTURE.md。
-待用户实测：`dev.bat` 真实启动后的等待 / 退出码提示（已验证运行占用时拒绝与 `-BuildOnly`，不启动已有软件）；标题栏拖动 / 双击 / 贴边、单行标签拖拽与取消、弹窗实际缩放、跨屏 DPI 和任务栏交互；品牌菜单 / 设置 / 命名标签组与真实收藏 exe 显式启动；目标第三方软件的焦点、输入、弹窗、标题栏、任务栏和多显示器表现；全局快捷键 / 托盘真实交互。嵌入兼容性不能用合成窗口结果代替。
-默认 × / Ctrl+W / 退出都会分离并保留软件。异常后只恢复仍存活的窗口，无法复活已销毁窗口或保证未保存内容。
-版本控制：当前分支 main，初版源码纳入本地提交；未配置远程、未推送或发布 GitHub。原 ExplorerTabs 仓库未修改。
+> **这是什么**：AI 断点续作的「交接包」。一次对话没干完，**下一个 AI 会话先读本文件**，就知道「做到哪、还剩什么、卡在哪、下一步从哪开始」。
+>
+> **维护规则见 AGENTS §5**：只留还在路上的内容；任务完结时在写入 CHANGELOG、ROADMAP 打 ✅ 的同一会话内删掉对应内容；长期有效的坑与理由迁到 ARCH §7；全文不超过 8,000 字。
+>
+> **接手步骤**：读 `AGENTS.md` → 按「当前任务」的范围查 ARCH §0.5，只读相关文件 → 从「下一步」第 1 条开始 → 每完成一个子步骤就更新本文件。
+
+---
+
+## 状态快照
+
+- **最近更新**：2026-11-10
+- **整体状态**：✅ 无进行中的开发任务；0.2.0 源码、测试与 AI 协作文档完成，发布包待重打
+- **工作分支**：`release/0.2.0`（0.2.0 提交在此分支，未合并回 `main`，未推送）
+- **最后验证状态**：`test.bat` ✅ 0 警告 / 0 错误，606 项断言通过；`sh check-docs.sh` ✅ 0 警告
+
+---
+
+## 当前任务（In Progress）
+
+- **目标**：无；等待下一个开发需求。
+- **范围 / 涉及文件**：无。
+- **完成定义（Definition of Done）**：无。
+
+> 当前：无进行中的任务。
+
+---
+
+## 进行中（子步骤 / 半成品）
+
+- （无。）
+
+## 待验收（代码已完成，等用户确认）
+
+1. **0.2.0 发布包重打**：当前 `dist\release\unpack` 仍是旧包，且 AppTabs 正从该目录运行。验收看点：正常退出后双击 `package.bat`，生成 `dist\dev\AppTabs_0.2.0_x64-unpack-debug.zip`、`dist\release\unpack\`、`dist\release\AppTabs_0.2.0_x64-unpack.zip` 与 `dist\release\SHA256SUMS.txt`。`package.bat` 在运行中会拒绝覆盖且不结束进程。
+2. **真实交互验收**：标题栏拖动 / 双击 / 贴边、页签拖拽排序与取消、跨屏 DPI、任务栏、托盘、全局快捷键，以及真实第三方软件的焦点 / 输入 / 弹窗仍需用户实测；合成窗口测试不能替代。
+
+## 阻塞 / 待决策（Blockers）
+
+- 当前 AppTabs 仍从 `dist\release\unpack` 运行，发布包无法替换。需要用户通过主窗或托盘**正常退出**，等待窗口恢复结束后重试 `package.bat`；不要强制结束进程。
+
+---
+
+## 下一步（Next Steps）
+
+1. 用户正常退出 AppTabs。
+2. 在项目根双击 `package.bat`，确认版本为 0.2.0、产物布局与 SHA256 正确。
+3. 用新包做一轮真实交互验收；通过后删除「待验收」第 1 条，并考虑把 `release/0.2.0` 合并回 `main`。
+
+---
+
+## 本任务验证（Verify）
+
+- 构建 / 测试：`test.bat`（当前 606 项断言通过）。
+- 开发构建：`dev.bat -BuildOnly`（不启动程序）。
+- 文档体检：`sh check-docs.sh`。
+- 打包：`package.bat`（需没有 AppTabs 从 `dist\release\unpack` 运行）。
+- 不注册真实全局热键 / 键盘钩子，不操作已有用户软件；native helper 只使用自建离屏窗口。
+
+---
+
+## 本任务决策（Decisions）
+
+- 0.2.0 提交位于 `release/0.2.0`，未合并 `main`；是否合并由用户决定（模板默认建议普通开发直接在主分支，只有用户明确要求才新建分支）。
+- 发布包采用 `dist\dev` debug zip + `dist\release\unpack` + release zip + SHA256 的 ExplorerTabs 布局；运行中只拒绝、不结束进程。
+
+---
+
+## 待解问题 / 给用户的提问（Open Questions）
+
+- （无。）

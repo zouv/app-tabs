@@ -1,0 +1,5 @@
+# 本项目手工对齐 vibe-coding-starter 文档体系；类型为自定义的 C# WinForms 桌面应用。
+type=desktop-csharp-winforms
+project_name=app-tabs
+template_version=2026-10-31.4
+created=2026-11-10
