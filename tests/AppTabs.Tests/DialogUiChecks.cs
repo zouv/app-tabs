@@ -135,7 +135,7 @@ namespace AppTabs.Tests
                 var logo = dialog.Controls.Find("aboutLogo", true).OfType<PictureBox>().Single();
                 Check(logo.Image != null && logo.Image.Width == 64, "about uses owned embedded AppIcon bitmap");
                 Check(dialog.Controls.Find("aboutVersion", true).Single().Text.Contains(typeof(WindowPicker).Assembly.GetName().Version!.ToString(3)), "about shows assembly version");
-                Check(dialog.Controls.Find("aboutSafety", true).Single().Text.Contains("不结束进程"), "about states preserve-software safety behavior");
+                Check(dialog.Controls.Find("aboutVersion", true).Single().Text.Contains("作者 @zouv"), "about shows author");
                 dialog.Close(); dialog.Dispose(); Check(logo.Image == null, "about releases logo resource on disposal");
             }
         }

@@ -9,24 +9,38 @@ namespace AppTabs.App
         internal static string VersionText => typeof(AboutDialog).Assembly.GetName().Version?.ToString(3) ?? "未知";
         public AboutDialog(bool services = true) : base(services)
         {
-            Text = "关于 AppTabs"; ClientSize = new Size(560, 356);
-            logo = new PictureBox { Name = "aboutLogo", SizeMode = PictureBoxSizeMode.Zoom, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 20, 0) };
+            Text = "关于 AppTabs"; ClientSize = new Size(480, 244);
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Color.White };
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
+            var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+            var footer = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false, Padding = new Padding(0, 12, 28, 12), BackColor = Color.White
+            };
+            var close = Theme.Button("关闭", true); close.AutoSize = false; close.Size = new Size(90, 32);
+            close.DialogResult = DialogResult.OK; footer.Controls.Add(close);
+
+            logo = new PictureBox { Name = "aboutLogo", SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(64, 64), Location = new Point(32, 22) };
             using (var icon = AppIcon.Load(64)) logo.Image = icon.ToBitmap();
-            var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            header.Controls.Add(logo, 0, 0);
-            header.Controls.Add(new Label { Name = "aboutVersion", Text = "AppTabs\n版本 " + VersionText, Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Ink }, 1, 0);
-            var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(24, 18, 24, 8) };
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 80)); content.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            content.Controls.Add(header, 0, 0);
-            content.Controls.Add(new Label { Name = "aboutPurpose", Text = "用标签页管理 Windows 桌面软件窗口。\n支持兼容分组与实验性嵌入，不自动启动或接管软件。", Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false }, 0, 1);
-            content.Controls.Add(new Label { Name = "aboutSafety", Text = "默认分离或退出会恢复并保留原软件，不结束进程。\n接管前先保存恢复日志，窗口查询失败会保留恢复记录。\n嵌入兼容性取决于目标软件；恢复不能复活已关闭的窗口，\n也不能保证未保存内容。", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Muted, UseMnemonic = false }, 0, 2);
-            var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 54, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(8) };
-            var close = Theme.Button("关闭", true); close.DialogResult = DialogResult.OK; footer.Controls.Add(close);
-            var root = new Panel { Dock = DockStyle.Fill }; root.Controls.Add(content); root.Controls.Add(footer);
+            var title = new Label
+            {
+                Name = "aboutTitle", Text = "AppTabs", AutoSize = true, Location = new Point(120, 18),
+                Font = new Font(Font.FontFamily, 18F, FontStyle.Bold), ForeColor = Theme.Ink
+            };
+            var version = new Label
+            {
+                Name = "aboutVersion", Text = "版本 " + VersionText + " · 作者 @zouv", AutoSize = true,
+                Location = new Point(120, 58), ForeColor = Theme.Muted
+            };
+            var purpose = new Label
+            {
+                Name = "aboutPurpose", Text = "用标签页管理 Windows 桌面软件窗口。\n支持兼容分组与实验性嵌入，不自动启动或接管软件。",
+                AutoSize = false, Size = new Size(330, 44), Location = new Point(120, 88), ForeColor = Theme.Ink, UseMnemonic = false
+            };
+            content.Controls.AddRange(new Control[] { logo, title, version, purpose });
+            root.Controls.Add(content, 0, 0); root.Controls.Add(footer, 0, 1);
             Controls.Add(root); AcceptButton = close; CancelButton = close;
         }
         protected override void Dispose(bool disposing)
