@@ -11,6 +11,10 @@ if (-not $SkipTests) {
 $package = Join-Path $PSScriptRoot 'package.ps1'
 foreach ($action in @('snapshot', 'build', 'collect')) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $package $action
+    if ($LASTEXITCODE -eq 2) {
+        Write-Output '[INFO] Packaging cancelled by user; no process was closed.'
+        exit 2
+    }
     if ($LASTEXITCODE -ne 0) { throw "Packaging step '$action' failed." }
 }
 Write-Output 'Ready: dist\release\unpack\AppTabs.exe'

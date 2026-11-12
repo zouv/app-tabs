@@ -63,6 +63,7 @@ namespace AppTabs.Core
         [DataMember] public WindowPlacement Placement { get; set; }
         [DataMember] public long HostHandle { get; set; }
         [DataMember] public HostingMode Mode { get; set; }
+        [DataMember] public bool FrameStripped { get; set; }
     }
 
     public sealed class WindowSession

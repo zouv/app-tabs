@@ -16,13 +16,18 @@ namespace AppTabs.Tests
         {
             string output = Path.Combine(ProjectRoot(), "artifacts"); Directory.CreateDirectory(output);
             var api = new FakeApi();
+            var chromeStore = new StateStore(Path.Combine(testDirectory, "chrome-settings.json"));
             using (var ui = new MainForm(api, new RecoveryJournal(Path.Combine(testDirectory, "chrome-recovery.json")),
-                new StateStore(Path.Combine(testDirectory, "chrome-settings.json")), new AppState(), false))
+                chromeStore, new AppState(), false))
             {
                 ui.Location = new Point(-24000, -24000);
                 ui.Show(); Application.DoEvents(); var handle = ui.Handle;
                 Check((GetWindowLongPtr(handle, -16).ToInt64() & 0x00C00000) == 0, "chrome removes native caption");
                 Check((GetWindowLongPtr(handle, -16).ToInt64() & 0x00040000) != 0, "chrome retains native resizing frame");
+                int expectedTopBand = (int)Math.Max(1, Math.Round(3 * ui.DeviceDpi / 96.0));
+                Check(ui.Padding.Top == expectedTopBand && ui.Padding.Left == 0 && ui.Padding.Right == 0 && ui.Padding.Bottom == 0,
+                    "top resize band is a small painted strip");
+                Check(ui.Width - ui.ClientSize.Width > 0 && ui.Height - ui.ClientSize.Height > 0, "native side / bottom resize frame remains");
                 var bar = ui.Controls.Find("tabs", true).OfType<TabBar>().Single();
                 Check(bar.Parent != ui && bar.Dock == DockStyle.Fill, "tabs share title row with caption controls");
                 var welcome = ui.Controls.Find("content", true).Single();
@@ -41,6 +46,9 @@ namespace AppTabs.Tests
                     Check(bar.Left >= brand.Right && bar.Right <= captions.Left, "tabs do not overlap caption buttons at " + width + ": tabs=" + bar.Bounds + ", brand=" + brand.Bounds + ", captions=" + captions.Bounds);
                     Check(ui.ContentBounds.Width > 0 && ui.ContentBounds.Height > 0, "content remains usable at " + width);
                     var toolbar = ui.Controls.Find("toolbar", true).Single();
+                    var status = ui.Controls.Find("status", true).Single();
+                    Check(status.Parent == toolbar, "status shares the toolbar row at " + width);
+                    Check(welcome.Bottom == ui.ClientSize.Height, "content reaches the bottom without a status strip at " + width);
                     Check(toolbar.Top >= bar.Parent.Bottom && toolbar.Bottom <= ui.Controls.Cast<Control>().Single(c => c.Handle == ui.ContentHandle).Top, "toolbar between title and content at " + width);
                     foreach (var control in Descendants(toolbar).Where(c => c.Width > 0 && c.Height > 0))
                         Check(control.Left >= 0 && control.Right <= control.Parent!.ClientSize.Width && control.Top >= 0 && control.Bottom <= control.Parent.ClientSize.Height,
@@ -51,10 +59,10 @@ namespace AppTabs.Tests
                 }
                 var nativeEdges = new[]
                 {
-                    (new Point(-2, ui.ClientSize.Height / 2), 10), (new Point(ui.ClientSize.Width + 2, ui.ClientSize.Height / 2), 11),
-                    (new Point(ui.ClientSize.Width / 2, ui.ClientSize.Height + 2), 15),
-                    (new Point(-2, 1), 13), (new Point(ui.ClientSize.Width + 2, 1), 14),
-                    (new Point(-2, ui.ClientSize.Height + 2), 16), (new Point(ui.ClientSize.Width + 2, ui.ClientSize.Height + 2), 17)
+                    (new Point(-1, ui.ClientSize.Height / 2), 10), (new Point(ui.ClientSize.Width + 1, ui.ClientSize.Height / 2), 11),
+                    (new Point(ui.ClientSize.Width / 2, ui.ClientSize.Height + 1), 15),
+                    (new Point(-1, 1), 13), (new Point(ui.ClientSize.Width + 1, 1), 14),
+                    (new Point(-1, ui.ClientSize.Height + 1), 16), (new Point(ui.ClientSize.Width + 1, ui.ClientSize.Height + 1), 17)
                 };
                 foreach (var edge in nativeEdges)
                     Check(SendMessage(handle, 0x84, IntPtr.Zero, PackedPoint(ui.PointToScreen(edge.Item1))).ToInt32() == edge.Item2,
@@ -107,11 +115,26 @@ namespace AppTabs.Tests
                 int offset = (int)typeof(TabBar).GetField("offset", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(bar)!;
                 Check(offset > 0, "selecting overflowed tab scrolls it into view");
                 Check(ui.Handle == handle, "chrome layout does not recreate host handle");
-                ui.WindowState = FormWindowState.Maximized; Application.DoEvents();
+                ui.JoinWindow(Identity(902), AttachPreference.Grouped);
+                var joined = chromeStore.Read();
+                Check(joined.RecentApps.Any(app => app.ImagePath == Identity(902).ImagePath && app.ClassName == Identity(902).ClassName),
+                    "join records recent app");
+                int moveMutations = api.Mutations;
+                ui.Left += 10;
+                Check(api.Mutations > moveMutations, "move lays out the active window immediately");
+                int layoutMutations = api.Mutations;
+                ui.WindowState = FormWindowState.Maximized;
+                Application.DoEvents();
+                Check(api.Mutations > layoutMutations, "maximize lays out the active window before the coalescing timer");
                 var area = Screen.FromHandle(ui.Handle).WorkingArea;
                 Check(ui.PointToScreen(Point.Empty) == area.Location && ui.ClientSize == area.Size, "maximized client fits monitor working area: origin=" + ui.PointToScreen(Point.Empty) + ", size=" + ui.ClientSize + ", area=" + area + ", bounds=" + ui.Bounds);
                 Check(ui.Controls.Find("chrome", true).Single().PointToScreen(Point.Empty).Y == area.Top, "maximized tabs are not under native top border");
-                ui.WindowState = FormWindowState.Normal; Application.DoEvents();
+                Check(ui.Padding.Top == 0, "maximized window removes the top resize band");
+                int restoreMutations = api.Mutations;
+                ui.WindowState = FormWindowState.Normal;
+                Application.DoEvents();
+                Check(api.Mutations > restoreMutations, "restore lays out the active window before the coalescing timer");
+                Check(ui.Padding.Top == expectedTopBand, "restored window restores the top resize band");
                 ui.Location = new Point(-24000, -24000); ui.Hide(); Application.DoEvents();
                 typeof(MainForm).GetMethod("EnterChromeMenuScope", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(ui, null);
                 typeof(MainForm).GetField("pendingRaise", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(ui, true);

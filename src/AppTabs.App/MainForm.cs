@@ -17,8 +17,8 @@ namespace AppTabs.App
         private readonly bool services;
         private readonly TabBar tabs = new TabBar { Name = "tabs" };
         private readonly Panel content = new Panel { Name = "content", Dock = DockStyle.Fill, BackColor = Theme.Surface };
-        private readonly Label status = new Label { Name = "status", Dock = DockStyle.Bottom, Height = 24, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Muted, BackColor = Theme.Surface, AutoEllipsis = true };
-        private readonly IconButton detach = new IconButton(UiGlyph.DetachWindow, "分离当前并保留软件") { Name = "detach" };
+        private readonly Label status = new Label { Name = "status", TextAlign = ContentAlignment.MiddleLeft, ForeColor = Theme.Muted, BackColor = Theme.Toolbar, AutoEllipsis = true, AutoSize = false };
+        private readonly IconButton detach = new IconButton(UiGlyph.DetachWindow, "分离标签…") { Name = "detach" };
         private readonly ToolStripMenuItem restoreGroup = new ToolStripMenuItem("恢复窗口组");
         private readonly ToolStripMenuItem saveGroup = new ToolStripMenuItem("保存窗口组");
         private readonly Timer monitor = new Timer { Interval = 1000 };
@@ -57,9 +57,9 @@ namespace AppTabs.App
             applicationIcon = AppIcon.Load(); Icon = applicationIcon;
             content.Paint += PaintWelcome;
             content.DoubleClick += (_, __) => { if (controller.Sessions.Count == 0) OpenPicker(); };
-            Controls.Add(content); Controls.Add(status);
+            Controls.Add(content);
             InitializeChrome();
-            detach.Click += (_, __) => { if (controller.Active != null) Detach(controller.Active); };
+            detach.Click += (_, __) => ShowDetachMenu();
             saveGroup.Click += (_, __) => Queue(SaveGroup);
             restoreGroup.Click += (_, __) => Queue(RestoreGroup);
             tabs.SelectTab += session => TryAction(() => Select(session));
@@ -69,9 +69,23 @@ namespace AppTabs.App
             tabs.AddWindow += () => Queue(OpenPicker);
             layoutTimer.Tick += (_, __) => { layoutTimer.Stop(); LayoutContent(pendingRaise); pendingRaise = false; };
             monitor.Tick += (_, __) => MonitorWindows();
-            Move += (_, __) => TrackAndLayout(); Resize += (_, __) => { TrackAndLayout(); if (controller.Sessions.Count == 0) content.Invalidate(); };
-            content.Resize += (_, __) => { if (controller.Sessions.Count == 0) content.Invalidate(); ScheduleLayout(false); };
-            Activated += (_, __) => ScheduleLayout(true);
+            LocationChanged += (_, __) => { TrackAndLayout(); LayoutActiveNow(); };
+            Resize += (_, __) => { TrackAndLayout(); if (controller.Sessions.Count == 0) content.Invalidate(); };
+            content.Resize += (_, __) =>
+            {
+                if (controller.Sessions.Count == 0) content.Invalidate();
+                LayoutActiveNow();
+                ScheduleLayout(false);
+            };
+            Activated += (_, __) =>
+            {
+                // Clicking the inactive host raises it above an active grouped window, exposing
+                // the content surface until the 40 ms layout timer raises the window back.
+                // Re-raise immediately; keep the full layout scheduled for geometry changes.
+                if (HostVisible && modalDepth == 0 && controller.Active?.Snapshot.Mode == HostingMode.Grouped)
+                    try { controller.RaiseActive(); } catch (Exception error) { SetStatus(error.Message); }
+                ScheduleLayout(true);
+            };
             Shown += (_, __) => OnReady();
             RefreshUi();
         }
@@ -88,13 +102,6 @@ namespace AppTabs.App
                 hotkey = new GlobalHotkey(Handle);
                 try { hotkey.Apply(state.HotkeyChoice); }
                 catch (Exception error) { SetStatus(error.Message); }
-                var menu = new ContextMenuStrip();
-                menu.Items.Add("显示 AppTabs", null, (_, __) => ShowHost());
-                menu.Items.Add("加入窗口…", null, (_, __) => { ShowHost(); Queue(OpenPicker); });
-                menu.Items.Add(new ToolStripSeparator());
-                menu.Items.Add("退出并保留所有软件", null, (_, __) => Close());
-                tray = new NotifyIcon { Icon = Icon, Text = "AppTabs", ContextMenuStrip = menu, Visible = true };
-                tray.DoubleClick += (_, __) => ShowHost();
             }
             monitor.Start(); RefreshUi();
             if (libraryError.Length != 0) SetStatus(libraryError);
@@ -113,10 +120,22 @@ namespace AppTabs.App
                     chosen = HostingMode.Grouped; fallback = error.Message;
                 }
             }
-            var session = controller.Attach(identity, content.Handle, chosen, content.ClientRectangle);
+            var session = controller.Attach(identity, content.Handle, chosen, content.ClientRectangle,
+                restoreCreatedVisible: false, borderlessGrouped: state.BorderlessGrouped != false);
             Select(session);
-            SetStatus(fallback.Length == 0 ? "已加入：" + session.DisplayTitle + " · " + ModeName(chosen) : "已用兼容分组加入：" + fallback);
+            SetStatus(fallback.Length == 0 ? "已加入：" + session.DisplayTitle + " · " + ModeName(chosen) : "已用" + ModeName(chosen) + "加入：" + fallback);
+            RememberRecentApp(session);
             return session;
+        }
+        private void RememberRecentApp(WindowSession session)
+        {
+            try
+            {
+                RecentAppsPolicy.Remember(state.RecentApps, session.Identity.ImagePath, session.Identity.ClassName,
+                    session.Title, state.RecentJoinLimit);
+                stateStore.Save(CaptureState());
+            }
+            catch (Exception error) { SetStatus("最近应用记录保存失败：" + error.Message); }
         }
         private void OpenPicker()
         {
@@ -124,15 +143,97 @@ namespace AppTabs.App
             using (var picker = new WindowPicker(controller.Sessions.Select(s => s.Identity.Handle)))
             {
                 if (RunModal(() => picker.ShowDialog(this)) != DialogResult.OK) return;
-                var errors = new List<string>();
-                foreach (var identity in picker.SelectedWindows)
-                {
-                    try { JoinWindow(identity, state.Preference); }
-                    catch (Exception error) { errors.Add(identity.Title + "：" + error.Message); }
-                }
-                RefreshUi();
-                if (errors.Count > 0) ShowErrors(string.Join("\n", errors));
+                JoinWindows(picker.SelectedWindows);
             }
+        }
+        private void JoinWindows(IEnumerable<WindowIdentity> identities)
+        {
+            var errors = new List<string>();
+            foreach (var identity in identities)
+            {
+                try { JoinWindow(identity, state.Preference); }
+                catch (Exception error) { errors.Add(identity.Title + "：" + error.Message); }
+            }
+            RefreshUi();
+            if (errors.Count > 0) ShowErrors(string.Join("\n", errors));
+        }
+        private void ShowAddWindowsMenu()
+        {
+            if (modalDepth != 0 || exiting) return;
+            var menu = new ContextMenuStrip { ShowImageMargin = false, ShowItemToolTips = true };
+            IReadOnlyList<WindowIdentity> candidates;
+            try { candidates = NativeWindowApi.DiscoverWindows(controller.Sessions.Select(s => s.Identity.Handle)); }
+            catch (Exception error) { SetStatus("读取窗口失败：" + error.Message); candidates = Array.Empty<WindowIdentity>(); }
+            int limit = Math.Max(RecentAppsPolicy.MinimumLimit, Math.Min(RecentAppsPolicy.MaximumLimit, state.RecentJoinLimit));
+            var recent = state.RecentApps.Take(limit).ToArray();
+            if (recent.Length == 0)
+                menu.Items.Add(new ToolStripMenuItem("暂无最近加入的应用") { Enabled = false });
+            foreach (var app in recent)
+            {
+                string appName = Path.GetFileNameWithoutExtension(app.ImagePath);
+                if (string.IsNullOrWhiteSpace(appName)) appName = app.ImagePath;
+                var matches = candidates.Where(candidate => RecentAppsPolicy.Matches(app, candidate)).ToArray();
+                var item = new ToolStripMenuItem(appName)
+                {
+                    ToolTipText = (string.IsNullOrWhiteSpace(app.LastTitle) ? appName : app.LastTitle) + "\n" + app.ImagePath
+                };
+                if (matches.Length == 0)
+                {
+                    bool attached = controller.Sessions.Any(session => RecentAppsPolicy.Matches(app, session.Identity));
+                    item.Text = appName + (attached ? "（已在标签中）" : "（当前未打开）");
+                    item.Enabled = false;
+                }
+                else if (matches.Length == 1)
+                {
+                    var chosen = matches[0];
+                    item.Click += (_, __) => QueueAfterMenu(() => JoinWindows(new[] { chosen }));
+                }
+                else
+                {
+                    item.Click += (_, __) => QueueAfterMenu(() => PickWindows(app, appName));
+                }
+                menu.Items.Add(item);
+            }
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("选择窗口…", null, (_, __) => QueueAfterMenu(OpenPicker));
+            ShowChromeMenu(menu, join, new Point(0, join.Height), true);
+        }
+        private void PickWindows(RecentApp app, string appName)
+        {
+            if (modalDepth != 0 || exiting) return;
+            var excluded = controller.Sessions.Select(s => s.Identity.Handle).ToArray();
+            Func<IReadOnlyList<WindowIdentity>> loader = () => NativeWindowApi.DiscoverWindows(excluded)
+                .Where(identity => RecentAppsPolicy.Matches(app, identity)).ToArray();
+            using (var picker = new WindowPicker(excluded, loader))
+            {
+                picker.Text = "加入窗口 — " + appName;
+                if (RunModal(() => picker.ShowDialog(this)) != DialogResult.OK) return;
+                JoinWindows(picker.SelectedWindows);
+            }
+        }
+        private void ShowDetachMenu()
+        {
+            if (modalDepth != 0 || exiting) return;
+            var menu = new ContextMenuStrip { ShowImageMargin = false, ShowItemToolTips = true };
+            var active = controller.Active;
+            var current = menu.Items.Add("分离当前标签", null, (_, __) => { if (active != null) QueueAfterMenu(() => Detach(active)); });
+            current.Enabled = active != null;
+            current.ToolTipText = "恢复当前标签对应的软件窗口，软件保持运行。";
+            var all = menu.Items.Add("分离所有标签", null, (_, __) => QueueAfterMenu(() =>
+            {
+                var errors = controller.DetachAll(); RefreshUi();
+                if (errors.Count > 0) ShowErrors(string.Join("\n", errors));
+                else SetStatus("已分离所有窗口，各软件保持运行。");
+            }));
+            all.Enabled = controller.Sessions.Count > 0;
+            all.ToolTipText = "恢复所有标签对应的软件窗口，软件保持运行。";
+            ShowChromeMenu(menu, detach, new Point(0, detach.Height), true);
+        }
+        private void QueueAfterMenu(Action action)
+        {
+            // The chrome menu owns a modal scope until its Closed cleanup is posted. Queueing
+            // twice puts the action behind that cleanup so OpenPicker's modal guard passes.
+            Queue(() => Queue(action));
         }
         public void Select(WindowSession session)
         {
@@ -235,6 +336,9 @@ namespace AppTabs.App
                     candidate.Preference = dialog.Preference;
                     candidate.HotkeyChoice = dialog.HotkeyChoice;
                     candidate.HideToTray = dialog.HideToTray;
+                    candidate.RecentJoinLimit = dialog.RecentJoinLimit;
+                    candidate.BorderlessGrouped = dialog.BorderlessGrouped;
+                    RecentAppsPolicy.Trim(candidate.RecentApps, candidate.RecentJoinLimit);
                     SettingsCommit.Save(state, candidate, stateStore.Save, hotkey == null ? (Action<int>?)null : hotkey.Apply,
                         hotkey == null || hotkey.Registered);
                     state = candidate; SetStatus("设置已保存；挂载模式只影响新加入窗口。");
@@ -267,6 +371,21 @@ namespace AppTabs.App
                 if (changed) RefreshUi();
             }
             catch (Exception error) { SetStatus("窗口状态暂时无法读取：" + error.Message); }
+        }
+        private void LayoutActiveNow()
+        {
+            // System move/resize loops run a modal message loop; the coalescing timer does not
+            // fire reliably there. Follow the host geometry immediately so the content panel
+            // never shows through while dragging or maximizing.
+            if (!ready || exiting || modalDepth != 0 || controller.Active == null || !HostVisible) return;
+            try
+            {
+                // A hidden grouped window (for example after a menu scope) must come back
+                // before the geometry update; otherwise the content panel stays exposed.
+                if (!NativeUi.IsWindowVisible(controller.Active.Identity.Hwnd)) controller.SetActiveVisible(true);
+                controller.LayoutActive(content.ClientRectangle);
+            }
+            catch (Exception error) { SetStatus(error.Message); }
         }
         private void TrackAndLayout()
         {
@@ -343,13 +462,30 @@ namespace AppTabs.App
             if (HostVisible && (root == Handle || foreground == controller.Active?.Identity.Hwnd))
             {
                 controller.SetActiveVisible(false);
-                if (state.HideToTray) Hide(); else WindowState = FormWindowState.Minimized;
+                if (state.HideToTray) { Hide(); ShowTrayIcon(); }
+                else { WindowState = FormWindowState.Minimized; HideTrayIcon(); }
                 UpdateKeyboardScope();
             }
             else ShowHost();
         }
         private void ShowHost()
-        { Show(); WindowState = lastMaximized ? FormWindowState.Maximized : FormWindowState.Normal; NativeUi.SetForegroundWindow(Handle); ScheduleLayout(true); UpdateKeyboardScope(); }
+        { Show(); WindowState = lastMaximized ? FormWindowState.Maximized : FormWindowState.Normal; NativeUi.SetForegroundWindow(Handle); ScheduleLayout(true); HideTrayIcon(); UpdateKeyboardScope(); }
+        private void ShowTrayIcon()
+        {
+            if (IsDisposed) return;
+            if (tray == null)
+            {
+                var menu = new ContextMenuStrip();
+                menu.Items.Add("显示 AppTabs", null, (_, __) => ShowHost());
+                menu.Items.Add("加入窗口…", null, (_, __) => { ShowHost(); Queue(OpenPicker); });
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add("退出并保留所有软件", null, (_, __) => Close());
+                tray = new NotifyIcon { Icon = Icon, Text = "AppTabs", ContextMenuStrip = menu };
+                tray.DoubleClick += (_, __) => ShowHost();
+            }
+            tray.Visible = true;
+        }
+        private void HideTrayIcon() { if (tray != null) tray.Visible = false; }
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == 0x312 && m.WParam.ToInt32() == GlobalHotkey.Id) { Queue(() => TryAction(ToggleHost)); return; }
@@ -386,14 +522,20 @@ namespace AppTabs.App
             keyboard?.Dispose(); hotkey?.Dispose(); if (tray != null) tray.Visible = false;
             base.OnFormClosing(e);
         }
-        public void SetStatus(string message) { if (!IsDisposed) status.Text = message; }
+        public void SetStatus(string message)
+        {
+            if (IsDisposed) return;
+            status.Text = message;
+            chromeTips.SetToolTip(status, message);
+        }
         private void TryAction(Action action)
         { try { action(); } catch (Exception error) { RefreshUi(); ShowErrors(error.Message); } }
         private void ShowErrors(string message)
         { RunModal(() => MessageBox.Show(this, message, "AppTabs", MessageBoxButtons.OK, MessageBoxIcon.Information)); }
         private void Queue(Action action)
         { if (!IsDisposed && IsHandleCreated) try { BeginInvoke(new Action(() => { if (!IsDisposed && !exiting) { ReleaseClosedMenus(); TryAction(action); } })); } catch (InvalidOperationException) { } }
-        private static string ModeName(HostingMode mode) => mode == HostingMode.Embedded ? "嵌入" : "兼容分组";
+        private string ModeName(HostingMode mode) => mode == HostingMode.Embedded ? "嵌入"
+            : state.BorderlessGrouped != false ? "无边框分组" : "兼容分组";
         protected override void Dispose(bool disposing)
         {
             if (disposing) { monitor.Dispose(); layoutTimer.Dispose(); keyboard?.Dispose(); hotkey?.Dispose(); if (tray != null) { tray.Visible = false; tray.ContextMenuStrip?.Dispose(); tray.Dispose(); } DisposeChrome(); }

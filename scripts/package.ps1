@@ -14,6 +14,7 @@ $stagingLogs = Join-Path $staging 'logs'
 $stagingDebugRoot = Join-Path $staging 'debug-source'
 $snapshotFile = Join-Path $root '.runtime\package-snapshot.json'
 . (Join-Path $PSScriptRoot 'PackageTransaction.ps1')
+. (Join-Path $PSScriptRoot 'ProcessGuard.ps1')
 
 function Write-Utf8([string]$path, [string]$text) {
     [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
@@ -43,10 +44,10 @@ function Assert-OutputUnlocked {
     foreach ($process in @(Get-Process -Name AppTabs -ErrorAction SilentlyContinue)) {
         $id = $process.Id
         try { $path = $process.Path }
-        catch { throw "Cannot verify running AppTabs PID $id. No processes were closed. Exit AppTabs normally and retry." }
+        catch { throw "Cannot verify running AppTabs PID $id. Exit AppTabs normally, then re-run package.bat; this step does not close processes." }
         finally { $process.Dispose() }
         if ([string]::IsNullOrWhiteSpace($path)) {
-            throw "Cannot verify running AppTabs PID $id. No processes were closed. Exit AppTabs normally and retry."
+            throw "Cannot verify running AppTabs PID $id. Exit AppTabs normally, then re-run package.bat; this step does not close processes."
         }
         foreach ($rootPath in $roots) {
             if ($path.StartsWith($rootPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -57,7 +58,7 @@ function Assert-OutputUnlocked {
     }
     if ($running.Count -gt 0) {
         throw ("AppTabs is running from the package output:`n" + ($running -join "`n") +
-            "`nExit through the main window or tray to detach and keep all software, wait for recovery to finish, then retry. No processes were closed.")
+            "`nExit it normally, then re-run package.bat to confirm closing it. This step does not close processes.")
     }
 }
 
@@ -114,6 +115,8 @@ function Write-BuildInfo([string]$path, [string]$version) {
 }
 
 function Write-Snapshot {
+    # The first step owns the interactive confirmation; later steps only assert.
+    Request-CloseRunningAppTabs -Operation 'packaging' -Roots @($finalDev, $finalRelease, $stagingBuildDebug, $stagingBuildRelease, $stagingDev, $stagingRelease)
     Assert-OutputUnlocked
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $stagingBuildDebug, $stagingBuildRelease, $stagingLogs | Out-Null

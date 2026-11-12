@@ -217,11 +217,23 @@ namespace AppTabs.Core
                 if (NativeMethods.GetParent(snapshot.Identity.Hwnd) != host)
                     throw new InvalidOperationException("SetParent 后父窗口校验失败。");
             }
+            else if (snapshot.Mode == HostingMode.Grouped && snapshot.FrameStripped)
+            {
+                // Keep the window top-level (DPI compatibility), but remove its own caption and
+                // resize frame so AppTabs owns the visible chrome and window operations.
+                long groupedStyle = snapshot.Style & ~(NativeMethods.WsCaption | NativeMethods.WsThickFrame |
+                    NativeMethods.WsMinimizeBox | NativeMethods.WsMaximizeBox | NativeMethods.WsSysMenu |
+                    NativeMethods.WsVisible | 0x20000000L | 0x01000000L);
+                WriteLong(snapshot.Identity.Hwnd, NativeMethods.GwlStyle, groupedStyle);
+                long groupedEx = (snapshot.ExtendedStyle & ~(NativeMethods.WsExWindowEdge | NativeMethods.WsExClientEdge |
+                    NativeMethods.WsExDlgModalFrame | NativeMethods.WsExStaticEdge | NativeMethods.WsExAppWindow)) | NativeMethods.WsExToolWindow;
+                WriteLong(snapshot.Identity.Hwnd, NativeMethods.GwlExStyle, groupedEx);
+            }
             FrameChanged(snapshot.Identity.Hwnd);
             Layout(snapshot, bounds);
             if (snapshot.Mode == HostingMode.Embedded)
                 Trace($"Native: embedded.chrome HWND=0x{snapshot.Identity.Handle:X} titleInset={MeasureEmbeddedTitleInset(snapshot.Identity.Hwnd)} viewport=({bounds.X},{bounds.Y},{bounds.Width},{bounds.Height})");
-            if (snapshot.Mode == HostingMode.Embedded)
+            if (snapshot.Mode == HostingMode.Embedded || snapshot.FrameStripped)
                 UpdateTaskbar(snapshot, false);
             TraceState("attach.after", snapshot, true);
         }
@@ -318,6 +330,9 @@ namespace AppTabs.Core
                     ChangeParent(snapshot.Identity.Hwnd, new IntPtr(snapshot.Parent));
                     TraceRestorePhase(snapshot, stage, phaseClock);
                     TraceState("restore.parent", snapshot);
+                }
+                if (snapshot.Mode == HostingMode.Embedded || snapshot.FrameStripped)
+                {
                     stage = "styles-hidden";
                     phaseClock.Restart();
                     RequireMatch(snapshot.Identity);
@@ -357,10 +372,21 @@ namespace AppTabs.Core
                     ((ReadLong(snapshot.Identity.Hwnd, NativeMethods.GwlStyle) & ~NativeMethods.WsVisible) != (snapshot.Style & ~NativeMethods.WsVisible) ||
                     ReadLong(snapshot.Identity.Hwnd, NativeMethods.GwlExStyle) != snapshot.ExtendedStyle))
                     throw new InvalidOperationException("恢复后窗口样式或扩展样式不符。");
+                if (snapshot.FrameStripped)
+                {
+                    const long changedStyle = NativeMethods.WsCaption | NativeMethods.WsThickFrame |
+                        NativeMethods.WsMinimizeBox | NativeMethods.WsMaximizeBox | NativeMethods.WsSysMenu;
+                    const long changedEx = NativeMethods.WsExWindowEdge | NativeMethods.WsExClientEdge |
+                        NativeMethods.WsExDlgModalFrame | NativeMethods.WsExStaticEdge |
+                        NativeMethods.WsExAppWindow | NativeMethods.WsExToolWindow;
+                    if ((ReadLong(snapshot.Identity.Hwnd, NativeMethods.GwlStyle) & changedStyle) != (snapshot.Style & changedStyle) ||
+                        (ReadLong(snapshot.Identity.Hwnd, NativeMethods.GwlExStyle) & changedEx) != (snapshot.ExtendedStyle & changedEx))
+                        throw new InvalidOperationException("恢复后分组窗口边框样式不符。");
+                }
                 TraceRestorePhase(snapshot, stage, phaseClock);
                 stage = "presentation";
                 phaseClock.Restart();
-                if (snapshot.Mode == HostingMode.Embedded)
+                if (snapshot.Mode == HostingMode.Embedded || snapshot.FrameStripped)
                 {
                     RequestRepaint(snapshot);
                     if (snapshot.WasVisible) UpdateTaskbar(snapshot, true);

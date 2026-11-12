@@ -68,14 +68,15 @@
 
 - 技术栈：C# / WinForms / .NET Framework 4.8 / x64；无第三方 NuGet。构建 / 运行 / 测试命令见 §4。
 - 分层：`src/AppTabs.Core`（纯策略、Win32 接管 / 还原、恢复与状态存储，无 UI）→ `src/AppTabs.App`（WinForms 主窗、标签栏、对话框、托盘、键盘钩子）→ `tests/AppTabs.Tests`（无测试框架依赖的控制台断言）。有逻辑的代码优先放 Core 并配测试，App 只做接线。
-- **版本号唯一出处 `Directory.Build.props` 的 `Version`**（当前 `0.2.0`）：程序集、`app.manifest` 的 `assemblyIdentity`、打包文件名都跟随它；不要在多处手写版本。`ApplicationIcon` 与嵌入 ICO 也只在 `AppTabs.App.csproj` 登记一次。
+- **版本号唯一出处 `Directory.Build.props` 的 `Version`**（当前 `0.3.0`）：程序集、`app.manifest` 的 `assemblyIdentity`、打包文件名都跟随它；不要在多处手写版本。`ApplicationIcon` 与嵌入 ICO 也只在 `AppTabs.App.csproj` 登记一次。
 - 名称不硬编码：主窗 / 托盘 / 对话框标题由代码中的常量或资源决定；新增名称先找现有引用方式，不要复制字符串。
 - 窗口身份：`WindowIdentity` = HWND / PID / TID / 进程启动时间 / 映像路径 / 类名。所有外部窗口操作按这套身份核验；标题只作显示或显式恢复组的筛选。
+- 分组窗口默认无边框：`WindowSnapshot.FrameStripped` 先于恢复日志落盘；去掉目标 caption / thickframe / sysmenu / min-max，设为 tool window 并隐藏任务栏，恢复时写回原样式。设置可关闭无边框、回退兼容边框。
 - 布局坐标：调用方给出的 `bounds` 一律是 **content HWND 客户区坐标**；`NativeWindowApi.Layout` 为分组模式转换到屏幕坐标，嵌入模式保持子窗口坐标。
 - DPI：宿主采用 PerMonitorV2；通用嵌入要求目标 DPI awareness 相同。自动模式只在原生修改之前回退到分组；修改后失败先回滚，不盲目重试。
-- UI：页签始终单行，不提供多行支持；标题栏无原生 caption，但保留原生 thick frame / 缩放边框；弹窗使用 `ShellDialog` 的圆角、1px 实色边框。
+- UI：页签始终单行，不提供多行支持；标题栏无原生 caption，保留原生 side / bottom thick frame 作为较宽的不可见缩放命中区，顶部用 3px 缩放带（与页签栏同色）；工具栏加入菜单平铺最近应用（不二级菜单）、分离先弹菜单；状态消息放工具栏，不设底部状态栏；弹窗使用 `ShellDialog` 的圆角、1px 实色边框。
 - 脚本：`scripts/*.ps1` 必须兼容 Windows PowerShell 5.1（避免 PS7-only 语法），文件为 ASCII + LF；根目录 `.bat` 为 CRLF，只做工具检查、参数与退出码传递。非必要不添加依赖，添加前先确认。
-- 打包：`package.bat` 的 `snapshot → build → collect` 使用 `.runtime\package-staging`；成功发布 `dist\dev` 与 `dist\release`，失败回滚。`dist` / `artifacts` / `.runtime` 不入库。
+- 打包：`package.bat` 的 `snapshot → build → collect` 使用 `.runtime\package-staging`；成功发布 `dist\dev` 与 `dist\release`，失败回滚。占用发布目录的 AppTabs 会先列出 PID / 路径并询问：仅输入 Y 才先正常退出、12 秒后强制结束 AppTabs 自身，其它输入取消。`dist` / `artifacts` / `.runtime` 不入库。
 
 ---
 
@@ -84,8 +85,8 @@
 - **不自动接管、关闭或启动用户已有软件**；自动测试只能操作自建窗口。用户明确点击“加入窗口”才接管，明确点击收藏才启动应用。
 - **接管之前必须落盘恢复日志**：`HostController.Attach` 先 Capture / Validate，再持久化全部快照，才执行第一次原生修改；写盘失败不修改窗口。
 - 所有窗口操作核验 `WindowIdentity` 的 HWND、PID、TID、进程启动时间、映像与类名；失效身份零 Restore，查询抛错是**未知状态**，不能当作窗口消失并丢弃恢复记录。
-- 默认退出、标签 ×、Ctrl+W、中键都**分离并保留软件**；关闭软件必须独立、明确操作，只发送 `WM_CLOSE`，保留日志直到窗口确实消失；**不杀进程**。
-- 窗口组 / 命名标签组只匹配并追加**已打开**的唯一窗口，不自动启动第三方软件；应用收藏只记录本地 `.exe` 与名称，点击后直接启动，不采集命令行、不拼接 shell、不自动提权、不自动挂载。
+- 默认退出、标签 ×、Ctrl+W、中键都**分离并保留软件**；关闭软件必须独立、明确操作，只发送 `WM_CLOSE`，保留日志直到窗口确实消失；**不杀被接管的第三方进程**。AppTabs 自身只在打包 / 开发构建时经交互式 Y 确认后关闭。
+- 窗口组 / 命名标签组只匹配并追加**已打开**的唯一窗口，不自动启动第三方软件；应用收藏只记录本地 `.exe` 与名称，点击后直接启动，不采集命令行、不拼接 shell、不自动提权、不自动挂载。最近应用菜单同样只匹配已打开窗口，不自动启动。
 - 设置与库必须原子写盘（临时文件 + `Flush(true)` + 替换）；坏文件保留原文件并禁止静默覆盖；候选成功写盘后才替换内存。`settings.json` v1 与 `library.json` v1 各自独立，不互相迁移或覆盖。
 - 单实例 mutex、恢复 gate 与看门狗协作：恢复日志 owner 仍运行时拒绝接管；看门狗只在宿主准确退出后恢复仍存活的窗口；已销毁窗口不能复活。
 - 全局热键 / 键盘钩子只做轻量前台判断与解析，向 UI 队列投递；菜单 / 模态期间停用标签快捷键；热键变更失败要补偿并明确报告“当前不可用”，不能谎称事务成功。
@@ -114,7 +115,7 @@
 - 完整构建 + 测试 + 打包：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1`，或 `build.bat`。脚本先构建测试工程、运行断言，再走 `package.bat` 的 snapshot / build / collect。
 - 只跑测试：`test.bat`（构建 `AppTabs.Tests` 并运行控制台断言）。
 - 开发构建：`dev.bat -BuildOnly`（输出 `.runtime\dev`，不启动程序）；不要用不带参数的 `dev.bat` 做自动验证，它会启动真实宿主。
-- 打包：`package.bat`（需要没有 AppTabs 从 `dist\release\unpack` 运行；占用时只报告并取消，不结束进程）。
+- 打包：`package.bat`（需要没有 AppTabs 从 `dist\release\unpack` 运行；占用时列出 PID / 路径并询问，仅输入 Y 才先正常退出、超时后强制结束 AppTabs，其它输入取消；非交互环境明确失败）。
 - 文档体检：`sh check-docs.sh`（占位符 / 初始化块、根文档与 `CLAUDE.md`、体量、脚本换行、CHANGELOG 疑似漏记）。有 FAIL 时退出码为 1。
 
 改代码后至少跑测试或 lint；能跑起来的，运行后实测。UI / 交互改动尽量实际操作确认。第三方软件兼容性、真实拖动 / 贴边、跨屏 DPI、任务栏与全局热键 / 托盘仍需用户实测，不能用 fake / 合成窗口验证代替。

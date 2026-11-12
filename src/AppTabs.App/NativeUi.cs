@@ -31,13 +31,6 @@ namespace AppTabs.App
         [DllImport("user32.dll")] internal static extern IntPtr GetSystemMenu(IntPtr window, [MarshalAs(UnmanagedType.Bool)] bool revert);
         [DllImport("user32.dll")] internal static extern uint EnableMenuItem(IntPtr menu, uint item, uint flags);
         [DllImport("user32.dll")] internal static extern int TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr window, IntPtr parameters);
-        [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
-        [DllImport("user32.dll")] private static extern int GetSystemMetricsForDpi(int index, uint dpi);
-        internal static int ResizeFramePixels(int dpi)
-        {
-            try { return GetSystemMetricsForDpi(32, (uint)dpi) + GetSystemMetricsForDpi(92, (uint)dpi); }
-            catch (EntryPointNotFoundException) { return GetSystemMetrics(32) + GetSystemMetrics(92); }
-        }
     }
 
     internal sealed class GlobalHotkey : IDisposable

@@ -20,7 +20,7 @@ namespace AppTabs.App
             {
                 bool acquired;
                 try { acquired = mutex.WaitOne(0); } catch (AbandonedMutexException) { acquired = true; }
-                if (!acquired) { MessageBox.Show("AppTabs 已在运行，请使用托盘图标或全局快捷键呼出。", "AppTabs"); return; }
+                if (!acquired) { MessageBox.Show("AppTabs 已在运行，请使用全局快捷键、托盘图标或任务栏激活。", "AppTabs"); return; }
                 try
                 {
                     var journal = new RecoveryJournal(Path.Combine(directory, "recovery.json"));

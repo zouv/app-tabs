@@ -54,6 +54,9 @@ namespace AppTabs.Core
         [DataMember] public AttachPreference Preference { get; set; }
         [DataMember] public int HotkeyChoice { get; set; }
         [DataMember] public bool HideToTray { get; set; }
+        [DataMember] public int RecentJoinLimit { get; set; } = RecentAppsPolicy.DefaultLimit;
+        [DataMember] public List<RecentApp> RecentApps { get; set; } = new List<RecentApp>();
+        [DataMember] public bool? BorderlessGrouped { get; set; }
         [DataMember] public List<SavedWindow> Group { get; set; } = new List<SavedWindow>();
         [DataMember] public int ActiveIndex { get; set; }
 
@@ -61,6 +64,8 @@ namespace AppTabs.Core
         {
             Version = Version, X = X, Y = Y, Width = Width, Height = Height, Maximized = Maximized,
             Preference = Preference, HotkeyChoice = HotkeyChoice, HideToTray = HideToTray,
+            RecentJoinLimit = RecentJoinLimit, RecentApps = RecentApps.Select(app => app.Copy()).ToList(),
+            BorderlessGrouped = BorderlessGrouped,
             Group = Group.Select(window => window.Copy()).ToList(), ActiveIndex = ActiveIndex
         };
     }
@@ -79,6 +84,18 @@ namespace AppTabs.Core
                     result.Width < 400 || result.Height < 300 || result.Width > 20000 || result.Height > 20000 ||
                     !Enum.IsDefined(typeof(AttachPreference), result.Preference) || result.HotkeyChoice < 0 || result.HotkeyChoice > 3)
                     throw new InvalidDataException("设置文件格式无效，原文件未覆盖。");
+                // New fields may be absent in older settings files; DataContract leaves them at 0/null.
+                if (result.RecentApps == null) result.RecentApps = new List<RecentApp>();
+                if (result.RecentJoinLimit == 0) result.RecentJoinLimit = RecentAppsPolicy.DefaultLimit;
+                if (result.RecentJoinLimit < RecentAppsPolicy.MinimumLimit || result.RecentJoinLimit > RecentAppsPolicy.MaximumLimit ||
+                    result.RecentApps.Count > 100)
+                    throw new InvalidDataException("最近应用设置无效，原文件未覆盖。");
+                foreach (var app in result.RecentApps)
+                {
+                    if (app == null) throw new InvalidDataException("最近应用记录含无效条目。");
+                    app.Validate();
+                }
+                RecentAppsPolicy.Trim(result.RecentApps, result.RecentJoinLimit);
                 foreach (var item in result.Group)
                     if (item == null || string.IsNullOrWhiteSpace(item.ImagePath) || !Path.IsPathRooted(item.ImagePath) ||
                         string.IsNullOrWhiteSpace(item.ClassName) || item.Title == null || item.Title.Length > 1024 ||

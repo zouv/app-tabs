@@ -22,7 +22,8 @@ namespace AppTabs.Core
             this.closer = closer ?? new NativeWindowCloser();
         }
 
-        public WindowSession Attach(WindowIdentity identity, IntPtr host, HostingMode mode, Rectangle bounds, bool restoreCreatedVisible = false)
+        public WindowSession Attach(WindowIdentity identity, IntPtr host, HostingMode mode, Rectangle bounds, bool restoreCreatedVisible = false,
+            bool borderlessGrouped = false)
         {
             if (sessions.Count >= 100) throw new InvalidOperationException("最多管理 100 个窗口。");
             if (sessions.Any(s => s.State != SessionState.Attached))
@@ -41,6 +42,7 @@ namespace AppTabs.Core
             }
             snapshot.HostHandle = host.ToInt64();
             snapshot.Mode = mode;
+            snapshot.FrameStripped = mode == HostingMode.Grouped && borderlessGrouped;
             var session = new WindowSession(snapshot);
             // No Win32 mutation if persisting the recovery information fails.
             store.Save(sessions.Select(s => s.Snapshot).Concat(new[] { snapshot }).ToArray());
@@ -122,6 +124,15 @@ namespace AppTabs.Core
             if (Active == null || Active.State != SessionState.Attached || !windows.Matches(Active.Identity)) return;
             windows.Layout(Active.Snapshot, bounds);
             if (raise) windows.Show(Active.Snapshot, true, true);
+        }
+
+        public void RaiseActive()
+        {
+            // Grouped windows are independent top-level windows. Re-raise the active one
+            // (SWP_NOACTIVATE) without touching its geometry, so activating the host does
+            // not expose the content surface while the scheduled layout is still pending.
+            if (Active == null || Active.State != SessionState.Attached || !windows.Matches(Active.Identity)) return;
+            windows.Show(Active.Snapshot, true, true);
         }
 
         public void SetActiveVisible(bool visible)

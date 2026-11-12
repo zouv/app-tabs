@@ -57,6 +57,15 @@ namespace AppTabs.Tests
             controller.RenameTab(one, "My editor"); controller.MoveTab(one, 1);
             Check(one.DisplayTitle == "My editor" && controller.Sessions[1] == one, "tab metadata changes");
             Check(api.Mutations == mutations, "metadata performs no window mutation");
+            controller.RaiseActive();
+            Check(api.Mutations == mutations + 1 && api.Visible[2] && !api.Visible[1], "raising active only re-shows the current window");
+            var emptyApi = new FakeApi();
+            new HostController(emptyApi, new FakeStore()).RaiseActive();
+            Check(emptyApi.Mutations == 0, "raise without active window is a no-op");
+            var borderApi = new FakeApi(); var borderStore = new FakeStore(); var border = new HostController(borderApi, borderStore);
+            var borderSession = border.Attach(Identity(6), new IntPtr(900), HostingMode.Grouped, bounds, false, true);
+            Check(borderStore.Last.Single().FrameStripped, "borderless grouped snapshot persisted before attach");
+            border.Detach(borderSession);
             Throws(() => controller.Attach(Identity(1), new IntPtr(900), HostingMode.Grouped, bounds), "duplicate handle rejected");
             api.FailShowOnce = 1;
             Throws(() => controller.Activate(one, bounds), "failed switch surfaced");
@@ -116,6 +125,26 @@ namespace AppTabs.Tests
                 Group = new List<SavedWindow> { new SavedWindow { ImagePath = Identity(1).ImagePath, ClassName = Identity(1).ClassName, Title = "文档 中文", CustomTitle = "工具", Mode = HostingMode.Grouped } } };
             stateStore.Save(state); var loaded = stateStore.Read();
             Check(loaded.Group[0].Title == "文档 中文" && loaded.HideToTray && loaded.HotkeyChoice == 2, "UTF8 state roundtrip");
+            var recent = new List<RecentApp>();
+            RecentAppsPolicy.Remember(recent, "C:\\sample\\A.exe", "AClass", "A1", 2);
+            RecentAppsPolicy.Remember(recent, "C:\\sample\\B.exe", "BClass", "B1", 2);
+            RecentAppsPolicy.Remember(recent, "c:\\SAMPLE\\a.exe", "AClass", "A2", 2);
+            Check(recent.Count == 2 && recent[0].LastTitle == "A2" && recent[1].LastTitle == "B1", "recent apps move to front and trim");
+            Check(RecentAppsPolicy.Matches(recent[0], new WindowIdentity { ImagePath = "C:\\SAMPLE\\a.exe", ClassName = "AClass" }) &&
+                !RecentAppsPolicy.Matches(recent[0], new WindowIdentity { ImagePath = "C:\\sample\\A.exe", ClassName = "Other" }), "recent app matches path and class");
+            state.RecentJoinLimit = 2; state.RecentApps = recent.Select(app => app.Copy()).ToList(); state.BorderlessGrouped = false;
+            stateStore.Save(state); loaded = stateStore.Read();
+            Check(loaded.RecentJoinLimit == 2 && loaded.RecentApps.Count == 2 && loaded.RecentApps[0].LastTitle == "A2" &&
+                loaded.BorderlessGrouped == false, "recent app state roundtrip");
+            File.WriteAllText(stateStore.FilePath,
+                "{\"Version\":1,\"X\":100,\"Y\":100,\"Width\":1120,\"Height\":760,\"Maximized\":false,\"Preference\":1,\"HotkeyChoice\":0,\"HideToTray\":false,\"Group\":[],\"ActiveIndex\":0}");
+            var legacy = stateStore.Read();
+            Check(legacy.RecentJoinLimit == RecentAppsPolicy.DefaultLimit && legacy.RecentApps.Count == 0 && legacy.BorderlessGrouped == null,
+                "legacy settings get recent defaults");
+            var invalidRecent = new AppState { RecentJoinLimit = 21 }; stateStore.Save(invalidRecent);
+            Throws(() => stateStore.Read(), "invalid recent limit rejected");
+            var invalidEntry = new AppState { RecentApps = new List<RecentApp> { new RecentApp { ImagePath = "relative.exe", ClassName = "X" } } };
+            stateStore.Save(invalidEntry); Throws(() => stateStore.Read(), "invalid recent entry rejected");
             stateStore.Save(loaded); Check(stateStore.Read().Group.Count == 1, "atomic state replacement");
             File.WriteAllText(stateStore.FilePath, "{broken"); Throws(() => stateStore.Read(), "malformed settings rejected");
             Check(File.ReadAllText(stateStore.FilePath) == "{broken", "invalid settings not overwritten");
@@ -150,14 +179,22 @@ namespace AppTabs.Tests
                 try
                 {
                     long[] handles = WaitHandles(ready, helper); host.Show(); Application.DoEvents();
-                    var api = new NativeWindowApi(new NoTaskbar()); var journal = new RecoveryJournal(Path.Combine(testDirectory, "native-recovery.json"));
+                    var taskbar = new NoTaskbar(); var api = new NativeWindowApi(taskbar); var journal = new RecoveryJournal(Path.Combine(testDirectory, "native-recovery.json"));
                     var controller = new HostController(api, journal);
                     var oneId = NativeWindowApi.Inspect(new IntPtr(handles[0])); var twoId = NativeWindowApi.Inspect(new IntPtr(handles[1]));
                     Check(oneId.ProcessId == helper.Id && twoId.ProcessId == helper.Id, "only owned helper process selected");
                     var originalOne = api.Capture(oneId); var originalTwo = api.Capture(twoId);
                     var bounds = new Rectangle(0, 0, 700, 450);
                     var one = controller.Attach(oneId, host.Handle, HostingMode.Embedded, bounds);
-                    var two = controller.Attach(twoId, host.Handle, HostingMode.Grouped, bounds);
+                    int groupedTaskbarRemovals = taskbar.Removes;
+                    var two = controller.Attach(twoId, host.Handle, HostingMode.Grouped, bounds, false, true);
+                    Check(taskbar.Removes == groupedTaskbarRemovals + 1, "borderless group removed from taskbar");
+                    long groupedStyle = GetWindowLongPtr(twoId.Hwnd, -16).ToInt64();
+                    Check((groupedStyle & 0x00C00000) == 0, "borderless group has no caption");
+                    Check((groupedStyle & 0x000F0000) == 0, "borderless group has no resize / system buttons");
+                    long groupedExStyle = GetWindowLongPtr(twoId.Hwnd, -20).ToInt64();
+                    Check((groupedExStyle & 0x00020301) == 0, "borderless group has no edge / modal frame styles");
+                    Check((groupedExStyle & 0x00040000) == 0 && (groupedExStyle & 0x00000080) != 0, "borderless group is a tool window hidden from taskbar / Alt+Tab");
                     Check(GetParent(oneId.Hwnd) == host.Handle && GetParent(twoId.Hwnd) == IntPtr.Zero, "cross-process mixed parenting");
                     controller.Activate(one, bounds); Application.DoEvents();
                     Check(IsWindowVisible(oneId.Hwnd) && !IsWindowVisible(twoId.Hwnd), "embedded active, group hidden");
@@ -166,13 +203,20 @@ namespace AppTabs.Tests
                     var groupRect = NativeWindowApi.ReadRect(twoId.Hwnd).ToRectangle(); var origin = host.PointToScreen(Point.Empty);
                     Check(groupRect.Location == origin && groupRect.Size == bounds.Size, "group uses screen coordinates");
                     controller.SetActiveVisible(false); Check(!IsWindowVisible(twoId.Hwnd), "host hidden hides group");
-                    controller.SetActiveVisible(true); controller.Detach(one); controller.Detach(two);
+                    controller.SetActiveVisible(true);
+                    int taskbarAdds = taskbar.Adds;
+                    controller.Detach(one); controller.Detach(two);
+                    Check(taskbar.Adds == taskbarAdds + 2, "detach restores taskbar entries");
                     var restoredOne = api.Capture(oneId); var restoredTwo = api.Capture(twoId);
                     Check(restoredOne.Style == originalOne.Style && restoredOne.ExtendedStyle == originalOne.ExtendedStyle && restoredOne.Parent == 0, "embedded styles restored");
-                    Check(restoredTwo.Style == originalTwo.Style && restoredTwo.Parent == 0, "group styles preserved");
+                    Check(restoredTwo.Style == originalTwo.Style && restoredTwo.ExtendedStyle == originalTwo.ExtendedStyle && restoredTwo.Parent == 0, "group styles restored");
                     Check(restoredOne.Placement.NormalPosition.ToRectangle() == originalOne.Placement.NormalPosition.ToRectangle(), "embedded placement restored");
                     Check(restoredTwo.Placement.NormalPosition.ToRectangle() == originalTwo.Placement.NormalPosition.ToRectangle(), "group placement restored");
                     Check(journal.Read()!.Windows.Count == 0, "native journal cleared after detach");
+                    var compatible = controller.Attach(twoId, host.Handle, HostingMode.Grouped, bounds);
+                    long compatibleStyle = GetWindowLongPtr(twoId.Hwnd, -16).ToInt64();
+                    Check((compatibleStyle & 0x00C00000) != 0 && (compatibleStyle & 0x00040000) != 0, "compatible grouped keeps native frame");
+                    controller.Detach(compatible);
                     var recycled = NativeWindowApi.Inspect(oneId.Hwnd); recycled.ProcessStartedUtcTicks++;
                     Check(!api.Matches(recycled), "recycled identity mismatch rejected");
                     // Render the real app's own controls without launching its tray or global hooks.
@@ -259,7 +303,30 @@ namespace AppTabs.Tests
         private static string ProjectRoot() => Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", ".."));
         private static ProcessStartInfo StartInfo(string exe, string arguments) => new ProcessStartInfo(exe, arguments) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
         private static Process StartHelper(string ready) => Process.Start(StartInfo(Assembly.GetExecutingAssembly().Location, $"--helper \"{ready}\""))!;
-        private static long[] WaitHandles(string path, Process process) { WaitFile(path, process); return File.ReadAllLines(path).Select(long.Parse).ToArray(); }
+        private static long[] WaitHandles(string path, Process process)
+        {
+            var timer = Stopwatch.StartNew();
+            while (timer.ElapsedMilliseconds < 5000 && !process.HasExited)
+            {
+                try
+                {
+                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (var reader = new StreamReader(stream))
+                    {
+                        var lines = reader.ReadToEnd().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (lines.Length >= 2) return lines.Select(long.Parse).ToArray();
+                    }
+                }
+                catch (IOException) { }
+                catch (FormatException) { }
+                Application.DoEvents(); Thread.Sleep(20);
+            }
+            Check(File.Exists(path), "helper ready");
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var reader = new StreamReader(stream))
+                return reader.ReadToEnd().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(long.Parse).ToArray();
+        }
         private static void WaitFile(string path, Process process)
         {
             var timer = Stopwatch.StartNew();
@@ -280,7 +347,10 @@ namespace AppTabs.Tests
             {
                 one.Controls.Add(new TextBox { Multiline = true, Dock = DockStyle.Fill, Text = "AppTabs isolated test data" });
                 one.Show(); two.Show();
-                File.WriteAllLines(ready, new[] { one.Handle.ToInt64().ToString(), two.Handle.ToInt64().ToString() });
+                // Publish the ready file atomically so the test never reads a partial write.
+                string pending = ready + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllLines(pending, new[] { one.Handle.ToInt64().ToString(), two.Handle.ToInt64().ToString() });
+                File.Move(pending, ready);
                 timer.Tick += (_, __) => { if (File.Exists(ready + ".stop")) Application.ExitThread(); };
                 timer.Start(); Application.Run();
             }
@@ -310,7 +380,7 @@ namespace AppTabs.Tests
             protected override CreateParams CreateParams { get { var value = base.CreateParams; value.ExStyle |= 0x80; return value; } }
             protected override bool ShowWithoutActivation => true;
         }
-        private sealed class NoTaskbar : ITaskbarService { public void Add(WindowIdentity identity) { } public void Remove(WindowIdentity identity) { } }
+        private sealed class NoTaskbar : ITaskbarService { public int Adds, Removes; public void Add(WindowIdentity identity) => Adds++; public void Remove(WindowIdentity identity) => Removes++; }
         private sealed class FakeStore : ISnapshotStore
         {
             public bool Fail; public IReadOnlyCollection<WindowSnapshot> Last = Array.Empty<WindowSnapshot>();

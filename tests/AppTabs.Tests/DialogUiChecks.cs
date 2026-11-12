@@ -51,7 +51,8 @@ namespace AppTabs.Tests
         }
         private static void SettingsUiChecks()
         {
-            var state = new AppState { Preference = AttachPreference.Grouped, HotkeyChoice = 2, HideToTray = true };
+            var state = new AppState { Preference = AttachPreference.Grouped, HotkeyChoice = 2, HideToTray = true,
+                RecentJoinLimit = 2, BorderlessGrouped = true };
             using (var dialog = NewDialog("SettingsDialog", state, false))
             {
                 ShowTestDialog(dialog);
@@ -59,10 +60,14 @@ namespace AppTabs.Tests
                 var hotkey = dialog.Controls.Find("hotkeyChoice", true).OfType<ComboBox>().Single();
                 Check(preference.Items.Count == 3 && preference.SelectedIndex == 1, "settings has three existing attach preferences");
                 Check(hotkey.Items.Count == 4 && hotkey.SelectedIndex == 2, "settings limits global hotkey to four existing choices");
+                var recent = dialog.Controls.Find("recentJoinLimit", true).OfType<NumericUpDown>().Single();
+                var borderless = dialog.Controls.Find("borderlessGrouped", true).OfType<CheckBox>().Single();
+                Check(recent.Value == 2 && borderless.Checked, "settings exposes recent app limit and borderless grouped");
                 Check(dialog.Controls.Find("settingsNavigation", true).Single().Controls.Count == 2, "settings side navigation has exactly two pages");
                 Check(dialog.Controls.Find("generalPage", true).Single().Visible && !dialog.Controls.Find("hotkeyPage", true).Single().Visible, "general page opens first");
-                Check(dialog.Controls.Find("generalPage", true).Single().Controls.Find("hideToTray", true).Length == 1 &&
-                    dialog.Controls.Find("hotkeyPage", true).Single().Controls.Find("hideToTray", true).Length == 0, "tray option belongs to general page");
+                Check(dialog.Controls.Find("generalPage", true).Single().Controls.Find("hideToTray", true).Length == 0 &&
+                    dialog.Controls.Find("hotkeyPage", true).Single().Controls.Find("hideToTray", true).Length == 1, "tray option belongs to hotkey page");
+                Check(Descendants(dialog.Controls.Find("hotkeyPage", true).Single()).Any(c => c.Text.Contains("默认不勾选")), "tray option explains the default minimize behavior");
                 var handle = dialog.Handle;
                 ((Button)dialog.Controls.Find("hotkeyNav", true).Single()).PerformClick(); Application.DoEvents();
                 Check(!dialog.Controls.Find("generalPage", true).Single().Visible && dialog.Controls.Find("hotkeyPage", true).Single().Visible, "hotkey navigation selects second page");
@@ -72,10 +77,14 @@ namespace AppTabs.Tests
                 Check(!Descendants(dialog).Any(c => c.Text.Contains("多行")), "settings does not add multiline tab preferences");
                 preference.SelectedIndex = 2; hotkey.SelectedIndex = 3;
                 ((CheckBox)dialog.Controls.Find("hideToTray", true).Single()).Checked = false;
+                recent.Value = 7; borderless.Checked = false;
                 var type = dialog.GetType();
                 Check((AttachPreference)type.GetProperty("Preference")!.GetValue(dialog)! == AttachPreference.Embedded &&
-                    (int)type.GetProperty("HotkeyChoice")!.GetValue(dialog)! == 3 && !(bool)type.GetProperty("HideToTray")!.GetValue(dialog)!, "settings exposes edits for host-owned save and registration");
-                Check(state.Preference == AttachPreference.Grouped && state.HotkeyChoice == 2 && state.HideToTray, "settings edits do not mutate state before host accepts");
+                    (int)type.GetProperty("HotkeyChoice")!.GetValue(dialog)! == 3 && !(bool)type.GetProperty("HideToTray")!.GetValue(dialog)! &&
+                    (int)type.GetProperty("RecentJoinLimit")!.GetValue(dialog)! == 7 &&
+                    !(bool)type.GetProperty("BorderlessGrouped")!.GetValue(dialog)!, "settings exposes edits for host-owned save and registration");
+                Check(state.Preference == AttachPreference.Grouped && state.HotkeyChoice == 2 && state.HideToTray &&
+                    state.RecentJoinLimit == 2 && state.BorderlessGrouped == true, "settings edits do not mutate state before host accepts");
                 Check(dialog.Handle == handle, "page changes preserve dialog HWND");
                 foreach (Control child in Descendants(table)) Check(child.Right <= child.Parent!.ClientSize.Width && child.Bottom <= child.Parent.ClientSize.Height, "fixed shortcut row fits page");
                 dialog.Close();

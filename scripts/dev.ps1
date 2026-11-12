@@ -3,23 +3,15 @@ $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskOutput = Join-Path $taskRoot '.runtime\dev'
 $taskExe = Join-Path $taskOutput 'AppTabs.exe'
+. (Join-Path $PSScriptRoot 'ProcessGuard.ps1')
 try {
-    $taskProcesses = @(Get-Process -ErrorAction Stop | Where-Object { $_.ProcessName -eq 'AppTabs' })
-    $taskBlocked = $false
-    foreach ($taskProcess in $taskProcesses) {
-        try {
-            $taskPath = $taskProcess.Path
-            if ([string]::IsNullOrWhiteSpace($taskPath)) { throw 'Process image is unavailable.' }
-            if (-not $BuildOnly -or [string]::Equals($taskPath, $taskExe, [StringComparison]::OrdinalIgnoreCase)) {
-                Write-Output "[INFO] Running AppTabs: PID $($taskProcess.Id) | $taskPath"
-                $taskBlocked = $true
-            }
-        }
-        catch { throw "Cannot verify AppTabs PID $($taskProcess.Id). No processes were closed. Retry after exiting AppTabs normally." }
-        finally { $taskProcess.Dispose() }
+    if ($BuildOnly) {
+        # Only a process running from the dev output locks the file being rebuilt.
+        Request-CloseRunningAppTabs -Operation 'the development build' -Roots @($taskOutput)
     }
-    if ($taskBlocked) {
-        throw 'AppTabs is still running (including its recovery watchdog). Exit through the main window or tray to detach and keep all software, wait for recovery to finish, then retry. Do not end the processes in Task Manager.'
+    else {
+        # The dev host shares the single-instance mutex and global hotkeys.
+        Request-CloseRunningAppTabs -Operation 'the development host' -AnyProcess
     }
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
         throw '.NET SDK is required. Install the .NET SDK and the .NET Framework 4.8 targeting pack.'

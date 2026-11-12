@@ -19,6 +19,8 @@ namespace AppTabs.App
         private ToolbarDivider toolbarDivider = null!;
         private Icon? applicationIcon, brandIcon, welcomeIcon;
         private bool nativeMenuOpen, layingOutChrome;
+        private bool lastZoomed;
+        private const int TopResizeBandLogical = 3;
         private int ChromePixels(int logical) => Theme.Pixels(DeviceDpi, logical);
 
         private void InitializeChrome()
@@ -42,12 +44,13 @@ namespace AppTabs.App
             chrome.MouseDown += (sender, e) => ChromeMouseDown((Control)sender!, e);
 
             toolbar = new Panel { Name = "toolbar", Dock = DockStyle.Top, Height = 36, BackColor = Theme.Toolbar };
-            join = new IconButton(UiGlyph.AddWindow, "加入已打开的窗口") { Name = "join", Primary = true };
+            join = new IconButton(UiGlyph.AddWindow, "加入窗口…") { Name = "join", Primary = true };
             toolbarDivider = new ToolbarDivider { Name = "toolbarDivider" };
             windowGroup = new IconButton(UiGlyph.WindowGroup, "窗口组 · 标签组 / 应用收藏") { Name = "windowGroup" };
             search = new IconButton(UiGlyph.Search, "搜索标签 · Ctrl+F") { Name = "search" };
+            toolbar.Controls.Add(status);
             toolbar.Controls.AddRange(new Control[] { join, detach, toolbarDivider, windowGroup, search });
-            join.Click += (_, __) => OpenPicker();
+            join.Click += (_, __) => ShowAddWindowsMenu();
             search.Click += (_, __) => SearchTabs();
             windowGroup.Click += (_, __) => { RebuildLibraryMenu(); ShowChromeMenu(groupMenu, windowGroup); };
             groupMenu.Items.AddRange(new ToolStripItem[] { saveGroup, restoreGroup });
@@ -56,23 +59,36 @@ namespace AppTabs.App
             Controls.Add(toolbar); Controls.Add(chrome);
             toolbar.Layout += (_, __) => LayoutToolbar();
             captionButtons.Layout += (_, __) => LayoutCaptionButtons();
-            Resize += (_, __) => { maximizeButton.Glyph = WindowState == FormWindowState.Maximized ? UiGlyph.Restore : UiGlyph.Maximize; };
-            DpiChanged += (_, __) => SyncChromeMetrics();
+            Resize += (_, __) =>
+            {
+                SyncTopResizeBand();
+                maximizeButton.Glyph = WindowState == FormWindowState.Maximized ? UiGlyph.Restore : UiGlyph.Maximize;
+            };
+            DpiChanged += (_, __) => { SyncChromeMetrics(); SyncTopResizeBand(); };
             SyncChromeMetrics();
         }
 
+        private void SyncTopResizeBand()
+        {
+            // The native top frame is pulled into the client so the system-painted strip
+            // disappears. Keep a small painted band at the top for resize hit-testing; the
+            // side / bottom native frame remains wider and invisible outside the client.
+            int band = NativeUi.IsZoomed(Handle) ? 0 : ChromePixels(TopResizeBandLogical);
+            if (Padding.Top != band || Padding.Left != 0 || Padding.Right != 0 || Padding.Bottom != 0)
+                Padding = new Padding(0, band, 0, 0);
+        }
         private void SyncChromeMetrics()
         {
             SuspendLayout();
             try
             {
-                chrome.Height = ChromePixels(36); toolbar.Height = ChromePixels(36); status.Height = ChromePixels(24);
-                status.Padding = new Padding(ChromePixels(12), 0, ChromePixels(8), 0);
+                chrome.Height = ChromePixels(36); toolbar.Height = ChromePixels(36);
                 brand.Width = ChromePixels(36); captionButtons.Width = ChromePixels(126);
                 brandIcon?.Dispose(); welcomeIcon?.Dispose();
                 brandIcon = AppIcon.Load(Math.Min(256, ChromePixels(24))); welcomeIcon = AppIcon.Load(Math.Min(256, ChromePixels(48)));
                 brand.ApplicationIcon = brandIcon; brand.Invalidate(); content.Invalidate();
                 LayoutCaptionButtons(); LayoutToolbar();
+                SyncTopResizeBand();
             }
             finally { ResumeLayout(true); }
         }
@@ -91,8 +107,10 @@ namespace AppTabs.App
             join.Bounds = new Rectangle(x, y, width, height); x += width + ChromePixels(2);
             detach.Bounds = new Rectangle(x, y, width, height); x += width;
             toolbarDivider.Bounds = new Rectangle(x, 0, ChromePixels(14), toolbar.Height); x += toolbarDivider.Width;
-            windowGroup.Bounds = new Rectangle(x, y, width, height);
+            windowGroup.Bounds = new Rectangle(x, y, width, height); x += width;
             search.Bounds = new Rectangle(Math.Max(0, toolbar.Width - ChromePixels(6) - width), y, width, height);
+            int statusLeft = x + ChromePixels(8), statusRight = Math.Max(statusLeft, search.Left - ChromePixels(8));
+            status.Bounds = new Rectangle(statusLeft, 0, statusRight - statusLeft, toolbar.Height);
         }
         private void ToggleMaximize()
         {
@@ -204,7 +222,7 @@ namespace AppTabs.App
                 layingOutChrome = true;
                 try
                 {
-                    chrome.Height = ChromePixels(36); toolbar.Height = ChromePixels(36); status.Height = ChromePixels(24);
+                    chrome.Height = ChromePixels(36); toolbar.Height = ChromePixels(36);
                     brand.Width = ChromePixels(36); captionButtons.Width = ChromePixels(126);
                     LayoutCaptionButtons(); LayoutToolbar();
                 }
@@ -220,17 +238,30 @@ namespace AppTabs.App
         {
             base.OnHandleCreated(e);
             // Never change FormBorderStyle after handle creation: hosted windows depend on this HWND.
+            lastZoomed = NativeUi.IsZoomed(Handle);
             if (chrome != null) SyncChromeMetrics();
         }
         private bool ProcessChromeMessage(ref Message m)
         {
+            if (m.Msg == 0x0005) // WM_SIZE
+            {
+                bool zoomed = NativeUi.IsZoomed(Handle);
+                if (zoomed != lastZoomed)
+                {
+                    lastZoomed = zoomed;
+                    // Maximize / restore changes the whole content rect at once. Let this WM_SIZE
+                    // finish updating the layout, then move the hosted window before the 40 ms
+                    // coalescing timer can let the near-white content panel show through.
+                    try { BeginInvoke(new Action(() => { if (!IsDisposed && !exiting) LayoutContent(true); })); }
+                    catch (InvalidOperationException) { }
+                }
+            }
             if (m.Msg == NativeUi.WmEnterMenuLoop && !nativeMenuOpen) { nativeMenuOpen = true; EnterChromeMenuScope(); }
             if (m.Msg == NativeUi.WmExitMenuLoop && nativeMenuOpen) { nativeMenuOpen = false; LeaveChromeMenuScope(); }
             if (m.Msg == NativeUi.WmNcCalcSize && m.WParam != IntPtr.Zero)
             {
                 var p = Marshal.PtrToStructure<NativeUi.NcCalcSizeParams>(m.LParam);
                 var proposed = Rectangle.FromLTRB(p.Rc0.Left, p.Rc0.Top, p.Rc0.Right, p.Rc0.Bottom);
-                int top = p.Rc0.Top;
                 base.WndProc(ref m);
                 p = Marshal.PtrToStructure<NativeUi.NcCalcSizeParams>(m.LParam);
                 if (NativeUi.IsZoomed(Handle))
@@ -243,14 +274,19 @@ namespace AppTabs.App
                     p.Rc0.Right = work.Right; p.Rc0.Bottom = work.Bottom;
                     m.Result = IntPtr.Zero;
                 }
-                else p.Rc0.Top = top; // Keep the native side / bottom resize frame while normal.
+                else
+                {
+                    // Keep the wide native side / bottom resize frame, but pull the top frame
+                    // into the client so no opaque system strip appears above the tab row.
+                    p.Rc0.Top = proposed.Top;
+                }
                 Marshal.StructureToPtr(p, m.LParam, false);
                 return true;
             }
             if (m.Msg == NativeUi.WmNcHitTest && !NativeUi.IsZoomed(Handle))
             {
-                Point point = PointToClient(NativeUi.MessagePoint(m.LParam)); int band = ChromePixels(4);
-                if (point.Y >= 0 && point.Y < band && point.X >= 0 && point.X < ClientSize.Width)
+                Point point = PointToClient(NativeUi.MessagePoint(m.LParam)); int band = Padding.Top;
+                if (band > 0 && point.Y >= 0 && point.Y < band && point.X >= 0 && point.X < ClientSize.Width)
                 { m.Result = new IntPtr(point.X < band ? 13 : point.X >= ClientSize.Width - band ? 14 : 12); return true; }
             }
             if (m.Msg == NativeUi.WmNcActivate)
@@ -259,9 +295,10 @@ namespace AppTabs.App
             {
                 base.WndProc(ref m);
                 var info = Marshal.PtrToStructure<NativeUi.MinMaxInfo>(m.LParam); var screen = Screen.FromHandle(Handle);
-                int frame = NativeUi.ResizeFramePixels(DeviceDpi);
-                info.MaxPosition = new NativeUi.NativePoint { X = screen.WorkingArea.Left - screen.Bounds.Left - frame, Y = screen.WorkingArea.Top - screen.Bounds.Top - frame };
-                info.MaxSize = new NativeUi.NativePoint { X = screen.WorkingArea.Width + frame * 2, Y = screen.WorkingArea.Height + frame * 2 };
+                int side = Math.Max(0, (Width - ClientSize.Width) / 2);
+                int bottom = Math.Max(0, Height - ClientSize.Height);
+                info.MaxPosition = new NativeUi.NativePoint { X = screen.WorkingArea.Left - screen.Bounds.Left - side, Y = screen.WorkingArea.Top - screen.Bounds.Top - side };
+                info.MaxSize = new NativeUi.NativePoint { X = screen.WorkingArea.Width + side * 2, Y = screen.WorkingArea.Height + side + bottom };
                 info.MinTrackSize = new NativeUi.NativePoint { X = MinimumSize.Width, Y = MinimumSize.Height };
                 Marshal.StructureToPtr(info, m.LParam, false); return true;
             }

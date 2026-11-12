@@ -12,7 +12,9 @@ namespace AppTabs.Core
         internal const long WsThickFrame = 0x00040000L, WsMinimizeBox = 0x00020000L, WsMaximizeBox = 0x00010000L;
         internal const long WsVisible = 0x10000000L;
         internal const long WsSysMenu = 0x00080000L, WsClipSiblings = 0x04000000L;
-        internal const long WsExAppWindow = 0x00040000L, WsExTopmost = 0x00000008L;
+        internal const long WsExAppWindow = 0x00040000L, WsExTopmost = 0x00000008L, WsExToolWindow = 0x00000080L;
+        internal const long WsExWindowEdge = 0x00000100L, WsExClientEdge = 0x00000200L;
+        internal const long WsExDlgModalFrame = 0x00000001L, WsExStaticEdge = 0x00020000L;
         internal const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004;
         internal const uint SwpNoActivate = 0x0010, SwpFrameChanged = 0x0020;
         internal const uint SwpShowWindow = 0x0040, SwpHideWindow = 0x0080;
