@@ -71,7 +71,7 @@ Program.Main
 | `KeyboardHook.cs` | 标签快捷键解析与前台范围判断 | 改键盘映射 |
 | `tests/AppTabs.Tests/Program.cs` | 控制台断言主入口、fake、native helper、watchdog | 改测试框架 / 新增检查 |
 | `tests/AppTabs.Tests/*Checks.cs` | 按模块拆分的断言（Chrome / Tab / Dialog / Library / Settings / Native / DPI / Watchdog） | 改对应模块测试 |
-| `scripts/build.ps1` / `scripts/dev.ps1` / `scripts/package.ps1` / `PackageTransaction.ps1` / `ProcessGuard.ps1` | 构建测试、开发构建、打包快照 / 发布 / 回滚、运行中 AppTabs 的交互式关闭确认 | 改构建与打包流程 |
+| `scripts/build.ps1` / `scripts/dev.ps1` / `scripts/package.ps1` / `PackageTransaction.ps1` / `ProcessGuard.ps1` | 构建测试、开发构建、打包快照 / 发布 / 回滚、运行中 AppTabs 的关闭策略（dev 直接强制；打包先确认） | 改构建与打包流程 |
 | `scripts/create-icon.ps1` / `assets/` | 生成七尺寸 ICO 与预览；SVG 源图 | 改图标 |
 | 根目录 `*.bat` | Windows 双击入口：工具检查、参数与退出码 | 改脚本入口 |
 | `Directory.Build.props` / `app.manifest` | 版本 / TFM / 警告即错误；清单身份 | 发版 / 改平台约束 |
@@ -161,7 +161,7 @@ Program.Main
 |---|---|---|
 | 完整构建 / 测试 / 打包 | `scripts/build.ps1`、`build.bat` | 测试通过后调用 package 三个动作 |
 | 只测试 | `test.bat` | 构建并运行控制台断言 |
-| 开发构建 | `scripts/dev.ps1`、`dev.bat` | `.runtime\dev`；`-BuildOnly` 不启动 |
+| 开发构建 | `scripts/dev.ps1`、`dev.bat` | `.runtime\dev`；`-BuildOnly` 不启动；运行中的实例直接强制关闭 |
 | 打包 | `scripts/package.ps1` + `PackageTransaction.ps1`、`ProcessGuard.ps1`、`package.bat` | snapshot / build / collect；占用时先询问再关闭；dev + release 布局；失败回滚 |
 | 文档体检 | `check-docs.sh` | 占位符 / 体量 / CLAUDE.md / 换行 / CHANGELOG 漏记 |
 

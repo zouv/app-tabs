@@ -46,11 +46,11 @@ Windows 没有保证任意应用可以跨进程嵌入。浏览器、Electron、W
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
 ```
 
-辅助脚本：`setup.bat` 检查 .NET SDK / .NET Framework 4.8 Targeting Pack 并还原；`dev.bat` 先检查 .NET SDK，缺少还原输入时执行 `dotnet restore`，再构建到 `.runtime\dev` 并等待程序退出，失败时保留错误窗口；`dev.bat -BuildOnly` 只构建、不启动；`test.bat` 只构建并运行测试；`build.bat` 构建并测试后复用打包流程；`package.bat` 按“记录现有产物 → Debug / Release 全新构建 → 收集”流程生成 `dist\dev\AppTabs_<版本>_x64-unpack-debug.zip`、`dist\release\unpack\`、`dist\release\AppTabs_<版本>_x64-unpack.zip` 与 `dist\release\SHA256SUMS.txt`，失败时恢复上一版 `dist\dev` / `dist\release`；打包不运行测试，也不关闭占用进程；`clean.bat` 清理 `bin` / `obj` 与测试截图，保留 `dist\`。
+辅助脚本：`setup.bat` 检查 .NET SDK / .NET Framework 4.8 Targeting Pack 并还原；`dev.bat` 先检查 .NET SDK，缺少还原输入时执行 `dotnet restore`，遇到运行中的 AppTabs 直接强制关闭后构建到 `.runtime\dev` 并等待程序退出，失败时保留错误窗口；`dev.bat -BuildOnly` 只构建、不启动；`test.bat` 只构建并运行测试；`build.bat` 构建并测试后复用打包流程；`package.bat` 按“记录现有产物 → Debug / Release 全新构建 → 收集”流程生成 `dist\dev\AppTabs_<版本>_x64-unpack-debug.zip`、`dist\release\unpack\`、`dist\release\AppTabs_<版本>_x64-unpack.zip` 与 `dist\release\SHA256SUMS.txt`，失败时恢复上一版 `dist\dev` / `dist\release`；打包不运行测试，占用发布目录时先询问是否强制关闭 AppTabs；`clean.bat` 清理 `bin` / `obj` 与测试截图，保留 `dist\`。
 
-如果 AppTabs 或其恢复看门狗正从 `dist\release\unpack` 运行，`package.bat` 会列出进程并保留旧包后取消。请通过主窗 / 托盘正常退出并等待恢复结束再重试，不要强制结束进程。
+如果 AppTabs 或其恢复看门狗正从 `dist\release\unpack` 运行，`package.bat` 会列出进程并询问；输入 Y 才强制关闭并继续打包，其它输入取消并保留旧包。
 
-开发版与发布版共用单实例和本机配置。已有 AppTabs 或其恢复看门狗运行时，`dev.bat` 会列出进程并取消；请通过主窗 / 托盘正常退出并等待恢复结束后重试，不要在任务管理器强制结束。
+开发版与发布版共用单实例和本机配置。已有 AppTabs 或其恢复看门狗运行时，`dev.bat` 会直接强制关闭后继续构建 / 启动。
 
 无第三方 NuGet；默认构建启用警告即错误并运行测试。测试只使用 fake 接口与自建的 WinForms 跨进程窗口，绝不接管用户已有软件，也不注册实际全局钩子 / 热键。
 

@@ -7,11 +7,11 @@ $taskExe = Join-Path $taskOutput 'AppTabs.exe'
 try {
     if ($BuildOnly) {
         # Only a process running from the dev output locks the file being rebuilt.
-        Request-CloseRunningAppTabs -Operation 'the development build' -Roots @($taskOutput)
+        Request-CloseRunningAppTabs -Operation 'the development build' -Roots @($taskOutput) -Force
     }
     else {
         # The dev host shares the single-instance mutex and global hotkeys.
-        Request-CloseRunningAppTabs -Operation 'the development host' -AnyProcess
+        Request-CloseRunningAppTabs -Operation 'the development host' -AnyProcess -Force
     }
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
         throw '.NET SDK is required. Install the .NET SDK and the .NET Framework 4.8 targeting pack.'

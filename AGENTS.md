@@ -85,7 +85,7 @@
 - **不自动接管、关闭或启动用户已有软件**；自动测试只能操作自建窗口。用户明确点击“加入窗口”才接管，明确点击收藏才启动应用。
 - **接管之前必须落盘恢复日志**：`HostController.Attach` 先 Capture / Validate，再持久化全部快照，才执行第一次原生修改；写盘失败不修改窗口。
 - 所有窗口操作核验 `WindowIdentity` 的 HWND、PID、TID、进程启动时间、映像与类名；失效身份零 Restore，查询抛错是**未知状态**，不能当作窗口消失并丢弃恢复记录。
-- 默认退出、标签 ×、Ctrl+W、中键都**分离并保留软件**；关闭软件必须独立、明确操作，只发送 `WM_CLOSE`，保留日志直到窗口确实消失；**不杀被接管的第三方进程**。AppTabs 自身只在打包 / 开发构建时经交互式 Y 确认后关闭。
+- 默认退出、标签 ×、Ctrl+W、中键都**分离并保留软件**；关闭软件必须独立、明确操作，只发送 `WM_CLOSE`，保留日志直到窗口确实消失；**不杀被接管的第三方进程**。AppTabs 自身在开发构建时直接强制关闭；打包时经交互式 Y 确认后关闭。
 - 窗口组 / 命名标签组只匹配并追加**已打开**的唯一窗口，不自动启动第三方软件；应用收藏只记录本地 `.exe` 与名称，点击后直接启动，不采集命令行、不拼接 shell、不自动提权、不自动挂载。最近应用菜单同样只匹配已打开窗口，不自动启动。
 - 设置与库必须原子写盘（临时文件 + `Flush(true)` + 替换）；坏文件保留原文件并禁止静默覆盖；候选成功写盘后才替换内存。`settings.json` v1 与 `library.json` v1 各自独立，不互相迁移或覆盖。
 - 单实例 mutex、恢复 gate 与看门狗协作：恢复日志 owner 仍运行时拒绝接管；看门狗只在宿主准确退出后恢复仍存活的窗口；已销毁窗口不能复活。
@@ -114,7 +114,7 @@
 
 - 完整构建 + 测试 + 打包：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1`，或 `build.bat`。脚本先构建测试工程、运行断言，再走 `package.bat` 的 snapshot / build / collect。
 - 只跑测试：`test.bat`（构建 `AppTabs.Tests` 并运行控制台断言）。
-- 开发构建：`dev.bat -BuildOnly`（输出 `.runtime\dev`，不启动程序）；不要用不带参数的 `dev.bat` 做自动验证，它会启动真实宿主。
+- 开发构建：`dev.bat -BuildOnly`（输出 `.runtime\dev`，不启动程序；运行中的 AppTabs 会先被强制关闭）；不要用不带参数的 `dev.bat` 做自动验证，它会启动真实宿主。
 - 打包：`package.bat`（需要没有 AppTabs 从 `dist\release\unpack` 运行；占用时列出 PID / 路径并询问，仅输入 Y 才先正常退出、超时后强制结束 AppTabs，其它输入取消；非交互环境明确失败）。
 - 文档体检：`sh check-docs.sh`（占位符 / 初始化块、根文档与 `CLAUDE.md`、体量、脚本换行、CHANGELOG 疑似漏记）。有 FAIL 时退出码为 1。
 

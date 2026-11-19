@@ -1,7 +1,7 @@
 # Shared guard for a running AppTabs process. ASCII only; Windows PowerShell 5.1.
 # The caller decides which processes block: every AppTabs process, or only those
-# whose image lives under the given output roots. Nothing is closed without an
-# explicit Y from an interactive console.
+# whose image lives under the given output roots. dev passes -Force (close and
+# continue); package prompts and only continues after an explicit Y.
 
 function Test-AppTabsPathUnder([string]$Path, [string[]]$Roots) {
     # An unreadable path cannot be proven safe, so treat it as blocking.
@@ -20,6 +20,7 @@ function Request-CloseRunningAppTabs {
         [Parameter(Mandatory = $true)][string]$Operation,
         [string[]]$Roots,
         [switch]$AnyProcess,
+        [switch]$Force,
         [int]$GracefulSeconds = 12
     )
     $blocking = @()
@@ -39,6 +40,25 @@ function Request-CloseRunningAppTabs {
         $display = if ([string]::IsNullOrWhiteSpace($entry.Path)) { '(path unavailable)' } else { $entry.Path }
         Write-Output ("       PID {0}  {1}" -f $entry.Id, $display)
     }
+    $ids = @($blocking | ForEach-Object { $_.Id })
+    if ($Force) {
+        Write-Output '       Force-closing now; unsaved work in these instances will be lost.'
+        Write-Output '       Only the AppTabs processes listed above are touched.'
+        foreach ($id in $ids) {
+            $process = Get-Process -Id $id -ErrorAction SilentlyContinue
+            if ($null -eq $process) { continue }
+            try { $process.Kill(); $null = $process.WaitForExit(5000) } catch { }
+            finally { $process.Dispose() }
+        }
+        $remaining = @(Get-Process -Id $ids -ErrorAction SilentlyContinue)
+        foreach ($process in $remaining) { $process.Dispose() }
+        if ($remaining.Count -gt 0) {
+            throw ('Could not close running AppTabs (PID ' + ($ids -join ', ') + '). Close it manually and retry.')
+        }
+        Write-Output '[INFO] Running AppTabs closed; continuing.'
+        return
+    }
+
     Write-Output '       Closing tries a normal exit first (detach and restore managed windows).'
     Write-Output "       If it does not exit within $GracefulSeconds seconds it is force-closed;"
     Write-Output '       embedded windows may then be closed and cannot be restored.'
@@ -53,7 +73,6 @@ function Request-CloseRunningAppTabs {
         exit 2
     }
 
-    $ids = @($blocking | ForEach-Object { $_.Id })
     foreach ($id in $ids) {
         $process = Get-Process -Id $id -ErrorAction SilentlyContinue
         if ($null -eq $process) { continue }
